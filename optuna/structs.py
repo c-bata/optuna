@@ -184,3 +184,12 @@ class DuplicatedStudyError(OptunaError):
     """
 
     pass
+
+
+class InvalidObjectiveFunction(OptunaError):
+    """Exception for an invalid objective function.
+
+    This error is raised when a specified objective function's structure is invalid.
+    """
+
+    pass

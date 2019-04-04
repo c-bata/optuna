@@ -1,5 +1,7 @@
+import ast
 import collections
 import datetime
+import inspect
 import math
 import multiprocessing
 import multiprocessing.pool
@@ -15,6 +17,8 @@ from optuna import storages
 from optuna import structs
 from optuna import trial as trial_module
 from optuna import types
+from optuna import distributions  # NOQA
+from optuna import ast_parser
 
 if types.TYPE_CHECKING:
     from typing import Any  # NOQA
@@ -76,6 +80,7 @@ class Study(object):
 
         self.study_id = self.storage.get_study_id_from_name(study_name)
         self.logger = logging.get_logger(__name__)
+        self.search_space = None  # type: Dict[str, distributions.BaseDistribution]
 
     def __getstate__(self):
         # type: () -> Dict[Any, Any]
@@ -205,6 +210,11 @@ class Study(object):
                 by this logic.
 
         """
+        src = inspect.getsource(func)
+        a = ast.parse(src)
+        if len(a.body) != 1 and isinstance(a.body[0], ast.FunctionDef):
+            raise structs.InvalidObjectiveFunction("Should only contain a FunctionDef object")
+        self.search_space = ast_parser.generate_search_space(a.body[0])
 
         if n_jobs == 1:
             self._optimize_sequential(func, n_trials, timeout, catch)
