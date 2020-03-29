@@ -2,7 +2,9 @@ import collections
 import datetime
 import gc
 import math
+import signal
 import threading
+import types
 import warnings
 
 import joblib
@@ -311,6 +313,15 @@ class Study(BaseStudy):
                 when ``n_jobs`` :math:`\\ne 1`.
         """
 
+        def handler(signum: int, frame: types.FrameType) -> None:
+
+            raise KeyboardInterrupt()
+
+        signal.signal(signal.SIGALRM, handler)
+
+        if timeout is not None:
+            signal.alarm(int(timeout))
+
         if not isinstance(catch, tuple):
             raise TypeError(
                 "The catch argument is of type '{}' but must be a tuple.".format(
@@ -340,14 +351,6 @@ class Study(BaseStudy):
 
                 if n_trials is not None:
                     _iter = iter(range(n_trials))
-                elif timeout is not None:
-                    # This is needed for mypy
-                    actual_timeout = timeout  # type: float
-                    _iter = iter(
-                        lambda: (datetime.datetime.now() - time_start).total_seconds()
-                        > actual_timeout,
-                        True,
-                    )
                 else:
                     # The following expression makes an iterator that never ends.
                     _iter = iter(int, 1)
@@ -371,6 +374,9 @@ class Study(BaseStudy):
                         )
                         for _ in _iter
                     )
+        except KeyboardInterrupt:
+            print("interrupted")
+            return
         finally:
             self._optimize_lock.release()
             self._progress_bar.close()
