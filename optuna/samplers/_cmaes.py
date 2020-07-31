@@ -108,6 +108,14 @@ class CmaEsSampler(BaseSampler):
                 to set this flag :obj:`True` when the :class:`~optuna.pruners.HyperbandPruner` is
                 used. Please see `the benchmark result
                 <https://github.com/optuna/optuna/pull/1229>`_ for the details.
+
+        support_n_cardinality_categorical:
+            Support categorical distribution if the cardinality is lower than you specified.
+
+            .. note::
+                Added in v2.1.0 as an experimental feature. The interface may change in newer
+                versions without prior notice. See
+                https://github.com/optuna/optuna/releases/tag/v2.0.0.
     """
 
     def __init__(
@@ -119,7 +127,8 @@ class CmaEsSampler(BaseSampler):
         warn_independent_sampling: bool = True,
         seed: Optional[int] = None,
         *,
-        consider_pruned_trials: bool = False
+        consider_pruned_trials: bool = False,
+        support_n_cardinality_categorical: Optional[int] = None
     ) -> None:
 
         self._x0 = x0
@@ -131,12 +140,17 @@ class CmaEsSampler(BaseSampler):
         self._cma_rng = np.random.RandomState(seed)
         self._search_space = optuna.samplers.IntersectionSearchSpace()
         self._consider_pruned_trials = consider_pruned_trials
+        self._support_n_cardinality_categorical = support_n_cardinality_categorical
 
         if self._consider_pruned_trials:
             self._raise_experimental_warning_for_consider_pruned_trials()
 
     @experimental("2.0.0", name="`consider_pruned_trials = True` in CmaEsSampler")
     def _raise_experimental_warning_for_consider_pruned_trials(self) -> None:
+        pass
+
+    @experimental("2.1.0", name="`support_n_cardinality_categorical` is specified in CmaEsSampler")
+    def _raise_experimental_warning_for_support_n_cardinality_categorical(self) -> None:
         pass
 
     def reseed_rng(self) -> None:
@@ -155,6 +169,14 @@ class CmaEsSampler(BaseSampler):
                 # `Trial`.
                 continue
 
+            if isinstance(distribution, optuna.distributions.CategoricalDistribution):
+                if self._support_n_cardinality_categorical is None:
+                    continue
+
+                categorical_cardinality = len(distribution.choices)
+                if categorical_cardinality > self._support_n_cardinality_categorical:
+                    continue
+
             if not isinstance(
                 distribution,
                 (
@@ -165,7 +187,7 @@ class CmaEsSampler(BaseSampler):
                     optuna.distributions.IntLogUniformDistribution,
                 ),
             ):
-                # Categorical distribution is unsupported.
+                # Unsupported distribution
                 continue
             search_space[name] = distribution
 
@@ -265,7 +287,15 @@ class CmaEsSampler(BaseSampler):
 
         # Init a CMA object.
         if self._x0 is None:
-            self._x0 = _initialize_x0(search_space)
+            # `_initialize_x0` returns internal representations.
+            x0 = _initialize_x0(search_space)
+            mean = np.array([x0[k] for k in ordered_keys], dtype=float)
+        else:
+            # `self._x0` is external representations.
+            mean = np.array(
+                [_to_cma_param(search_space[k], self._x0[k]) for k in
+                 ordered_keys], dtype=float
+            )
 
         if self._sigma0 is None:
             sigma0 = _initialize_sigma0(search_space)
@@ -274,7 +304,6 @@ class CmaEsSampler(BaseSampler):
 
         # Avoid ZeroDivisionError in cmaes.
         sigma0 = max(sigma0, _EPS)
-        mean = np.array([self._x0[k] for k in ordered_keys], dtype=float)
         bounds = _get_search_space_bound(ordered_keys, search_space)
         n_dimension = len(ordered_keys)
         return CMA(
@@ -343,6 +372,8 @@ def _to_cma_param(distribution: BaseDistribution, optuna_param: Any) -> float:
         return float(optuna_param)
     if isinstance(distribution, optuna.distributions.IntLogUniformDistribution):
         return math.log(optuna_param)
+    if isinstance(distribution, optuna.distributions.CategoricalDistribution):
+        return distribution.choices.index(optuna_param)
     return optuna_param
 
 
@@ -362,26 +393,34 @@ def _to_optuna_param(distribution: BaseDistribution, cma_param: float) -> Any:
         r = np.round(cma_param - math.log(distribution.low))
         v = r + math.log(distribution.low)
         return int(math.exp(v))
+    if isinstance(distribution, optuna.distributions.CategoricalDistribution):
+        v = int(np.round(cma_param))
+        return distribution.choices[v]
     return cma_param
 
 
-def _initialize_x0(search_space: Dict[str, BaseDistribution]) -> Dict[str, np.ndarray]:
+def _initialize_x0(search_space: Dict[str, BaseDistribution]) -> Dict[str, float]:
     x0 = {}
     for name, distribution in search_space.items():
-        if isinstance(distribution, optuna.distributions.UniformDistribution):
-            x0[name] = np.mean([distribution.high, distribution.low])
-        elif isinstance(distribution, optuna.distributions.DiscreteUniformDistribution):
-            x0[name] = np.mean([distribution.high, distribution.low])
-        elif isinstance(distribution, optuna.distributions.IntUniformDistribution):
-            x0[name] = int(np.mean([distribution.high, distribution.low]))
-        elif isinstance(distribution, optuna.distributions.IntLogUniformDistribution):
+        if isinstance(
+            distribution,
+            (
+                optuna.distributions.UniformDistribution,
+                optuna.distributions.DiscreteUniformDistribution,
+                optuna.distributions.IntUniformDistribution,
+            ),
+        ):
+            x0[name] = distribution.low + (distribution.high - distribution.low) / 2
+        elif isinstance(
+            distribution,
+            (
+                optuna.distributions.LogUniformDistribution,
+                optuna.distributions.IntLogUniformDistribution,
+            ),
+        ):
             log_high = math.log(distribution.high)
             log_low = math.log(distribution.low)
-            x0[name] = np.mean([log_high, log_low])
-        elif isinstance(distribution, optuna.distributions.LogUniformDistribution):
-            log_high = math.log(distribution.high)
-            log_low = math.log(distribution.low)
-            x0[name] = np.mean([log_high, log_low])
+            x0[name] = log_low + (log_high - log_low) / 2
         else:
             raise NotImplementedError(
                 "The distribution {} is not implemented.".format(distribution)
@@ -407,6 +446,8 @@ def _initialize_sigma0(search_space: Dict[str, BaseDistribution]) -> float:
             log_high = math.log(distribution.high)
             log_low = math.log(distribution.low)
             sigma0.append((log_high - log_low) / 6)
+        elif isinstance(distribution, optuna.distributions.CategoricalDistribution):
+            sigma0.append((len(distribution.choices) - 1) / 6)
         else:
             raise NotImplementedError(
                 "The distribution {} is not implemented.".format(distribution)
@@ -439,6 +480,8 @@ def _get_search_space_bound(
             ),
         ):
             bounds.append([_to_cma_param(dist, dist.low), _to_cma_param(dist, dist.high)])
+        elif isinstance(dist, optuna.distributions.CategoricalDistribution):
+            bounds.append([-0.5, len(dist.choices) - 0.5 - _EPS])
         else:
             raise NotImplementedError("The distribution {} is not implemented.".format(dist))
     return np.array(bounds, dtype=float)
