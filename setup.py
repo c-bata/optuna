@@ -1,11 +1,9 @@
 import os
-import sys
 
 import pkg_resources
 from setuptools import find_packages
 from setuptools import setup
 
-from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -30,171 +28,13 @@ def get_long_description() -> str:
 def get_install_requires() -> List[str]:
 
     return [
-        "alembic",
-        "cliff",
-        "cmaes>=0.5.1",
+        "cmaes==0.6.0",
         "colorlog",
         "joblib",
         "numpy",
         "packaging>=20.0",
         "scipy!=1.4.0",
-        "sqlalchemy>=1.1.0",
-        "tqdm",
     ]
-
-
-def get_tests_require() -> List[str]:
-
-    return get_extras_require()["testing"]
-
-
-def get_extras_require() -> Dict[str, List[str]]:
-
-    requirements = {
-        "checking": ["black", "hacking", "mypy"],
-        "codecov": ["codecov", "pytest-cov"],
-        "doctest": [
-            "cma",
-            "pandas",
-            "plotly>=4.0.0",
-            "scikit-learn>=0.19.0,<0.23.0",
-            "scikit-optimize",
-            "mlflow",
-        ],
-        "document": [
-            # TODO(hvy): Unpin `sphinx` version after:
-            # https://github.com/sphinx-doc/sphinx/issues/7807.
-            "sphinx>=3.0.0,!=3.1.0,!=3.1.1,!=3.1.2,!=3.2.0",
-            # As reported in: https://github.com/readthedocs/sphinx_rtd_theme/issues/949,
-            # `sphinx_rtd_theme` 0.5.0 is still not compatible with `sphinx` >= 3.0.
-            "sphinx_rtd_theme<0.5.0",
-            "sphinx-gallery",
-            "pillow",
-            "matplotlib",
-            "scikit-learn",
-        ],
-        "example": [
-            "catboost",
-            "chainer",
-            "lightgbm",
-            "mlflow",
-            "mpi4py",
-            "mxnet",
-            "nbval",
-            "scikit-image",
-            "scikit-learn>=0.19.0,<0.23.0",  # optuna/visualization/param_importances.py.
-            "xgboost",
-            "keras",
-            "tensorflow>=2.0.0",
-            "tensorflow-datasets",
-        ]
-        + (
-            (
-                ["torch==1.6.0", "torchvision==0.7.0"]
-                if sys.platform == "darwin"
-                else ["torch==1.6.0+cpu", "torchvision==0.7.0+cpu"]
-            )
-            + ["pytorch-ignite", "thop"]
-            if (3, 5) < sys.version_info[:2]
-            else []
-        )
-        + (["stable-baselines3>=0.7.0"] if (3, 5) < sys.version_info[:2] else [])
-        + (
-            ["allennlp==1.0.0", "fastai<2", "pytorch_lightning>=0.7.1"]
-            if (3, 5) < sys.version_info[:2] < (3, 8)
-            else []
-        )
-        + (["pytorch-lightning>=0.7.2"] if (3, 8) == sys.version_info[:2] else [])
-        + (
-            ["llvmlite<=0.31.0", "fsspec<0.8.0"] if (3, 5) == sys.version_info[:2] else []
-        )  # Newer `llvmlite` is not distributed with wheels for Python 3.5.
-        # Newer `fsspec` uses f-strings, which is not compatible with Python 3.5.
-        + (["dask[dataframe]", "dask-ml",] if sys.version_info[:2] < (3, 8) else [])
-        + (["catalyst"] if (3, 5) < sys.version_info[:2] else []),
-        "experimental": ["redis"],
-        "testing": [
-            # TODO(toshihikoyanase): Remove the version constraint after resolving the issue
-            # https://github.com/optuna/optuna/issues/1000.
-            "bokeh<2.0.0",
-            "chainer>=5.0.0",
-            "cma",
-            "fakeredis",
-            "lightgbm",
-            "mlflow",
-            "mpi4py",
-            "mxnet",
-            "pandas",
-            "plotly>=4.0.0",
-            "pytest",
-            "scikit-learn>=0.19.0,<0.23.0",
-            "scikit-optimize",
-            "xgboost",
-            "keras",
-            "tensorflow",
-            "tensorflow-datasets",
-        ]
-        + (
-            (
-                ["torch==1.6.0", "torchvision==0.7.0"]
-                if sys.platform == "darwin"
-                else ["torch==1.6.0+cpu", "torchvision==0.7.0+cpu"]
-            )
-            + ["pytorch-ignite"]
-            if (3, 5) < sys.version_info[:2]
-            else []
-        )
-        + (
-            ["allennlp==1.0.0", "fastai<2", "pytorch_lightning>=0.7.1"]
-            if (3, 5) < sys.version_info[:2] < (3, 8)
-            else []
-        )
-        + (["catalyst"] if (3, 5) < sys.version_info[:2] else [])
-        + (["pytorch-lightning>=0.7.2"] if (3, 8) == sys.version_info[:2] else []),
-        "tests": ["fakeredis", "pytest"],
-        "optional": [
-            "bokeh<2.0.0",  # optuna/cli.py, optuna/dashboard.py.
-            "pandas",  # optuna/study.py
-            "plotly>=4.0.0",  # optuna/visualization.
-            "redis",  # optuna/storages/redis.py.
-            "scikit-learn>=0.19.0,<0.23.0",  # optuna/visualization/param_importances.py.
-        ],
-        "integration": [
-            # TODO(toshihikoyanase): Remove the version constraint after resolving the issue
-            # https://github.com/optuna/optuna/issues/1000.
-            "chainer>=5.0.0",
-            "cma",
-            "lightgbm",
-            "mlflow",
-            "mpi4py",
-            "mxnet",
-            "pandas",
-            "scikit-learn>=0.19.0,<0.23.0",
-            "scikit-optimize",
-            "xgboost",
-            "keras",
-            "tensorflow",
-            "tensorflow-datasets",
-        ]
-        + (
-            (
-                ["torch==1.6.0", "torchvision==0.7.0"]
-                if sys.platform == "darwin"
-                else ["torch==1.6.0+cpu", "torchvision==0.7.0+cpu"]
-            )
-            + ["pytorch-ignite"]
-            if (3, 5) < sys.version_info[:2]
-            else []
-        )
-        + (
-            ["allennlp==1.0.0", "fastai<2", "pytorch-lightning>=0.7.1"]
-            if (3, 5) < sys.version_info[:2] < (3, 8)
-            else []
-        )
-        + (["catalyst"] if (3, 5) < sys.version_info[:2] else [])
-        + (["pytorch-lightning>=0.7.2"] if (3, 8) == sys.version_info[:2] else []),
-    }
-
-    return requirements
 
 
 def find_any_distribution(pkgs: List[str]) -> Optional[pkg_resources.Distribution]:
@@ -217,29 +57,8 @@ setup(
     author_email="akiba@preferred.jp",
     url="https://optuna.org/",
     packages=find_packages(),
-    package_data={
-        "optuna": [
-            "storages/_rdb/alembic.ini",
-            "storages/_rdb/alembic/*.*",
-            "storages/_rdb/alembic/versions/*.*",
-        ]
-    },
     python_requires=">=3.5",
     install_requires=get_install_requires(),
-    tests_require=get_tests_require(),
-    extras_require=get_extras_require(),
-    entry_points={
-        "console_scripts": ["optuna = optuna.cli:main"],
-        "optuna.command": [
-            "create-study = optuna.cli:_CreateStudy",
-            "delete-study = optuna.cli:_DeleteStudy",
-            "study set-user-attr = optuna.cli:_StudySetUserAttribute",
-            "studies = optuna.cli:_Studies",
-            "dashboard = optuna.cli:_Dashboard",
-            "study optimize = optuna.cli:_StudyOptimize",
-            "storage upgrade = optuna.cli:_StorageUpgrade",
-        ],
-    },
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Science/Research",

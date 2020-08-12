@@ -16,7 +16,6 @@ from optuna._study_direction import StudyDirection
 from optuna._study_summary import StudySummary  # NOQA
 from optuna import exceptions
 from optuna import logging
-from optuna import progress_bar as pbar_module
 from optuna import pruners
 from optuna import samplers
 from optuna import storages
@@ -36,8 +35,6 @@ if type_checking.TYPE_CHECKING:
     from typing import Tuple  # NOQA
     from typing import Type  # NOQA
     from typing import Union  # NOQA
-
-    from optuna.distributions import BaseDistribution  # NOQA
 
     ObjectiveFuncType = Callable[[trial_module.Trial], float]
 
@@ -217,7 +214,6 @@ class Study(BaseStudy):
         catch=(),  # type: Tuple[Type[Exception], ...]
         callbacks=None,  # type: Optional[List[Callable[[Study, FrozenTrial], None]]]
         gc_after_trial=False,  # type: bool
-        show_progress_bar=False,  # type: bool
     ):
         # type: (...) -> None
         """Optimize an objective function.
@@ -262,11 +258,6 @@ class Study(BaseStudy):
                 .. seealso::
 
                     :ref:`out-of-memory-gc-collect`
-
-            show_progress_bar:
-                Flag to show progress bars or not. To disable progress bar, set this ``False``.
-                Currently, progress bar is experimental feature and disabled
-                when ``n_jobs`` :math:`\\ne 1`.
         """
 
         if not isinstance(catch, tuple):
@@ -279,11 +270,6 @@ class Study(BaseStudy):
         if not self._optimize_lock.acquire(False):
             raise RuntimeError("Nested invocation of `Study.optimize` method isn't allowed.")
 
-        # TODO(crcrpar): Make progress bar work when n_jobs != 1.
-        self._progress_bar = pbar_module._ProgressBar(
-            show_progress_bar and n_jobs == 1, n_trials, timeout
-        )
-
         self._stop_flag = False
 
         try:
@@ -292,10 +278,6 @@ class Study(BaseStudy):
                     func, n_trials, timeout, catch, callbacks, gc_after_trial, None
                 )
             else:
-                if show_progress_bar:
-                    msg = "Progress bar only supports serial execution (`n_jobs=1`)."
-                    warnings.warn(msg)
-
                 time_start = datetime.datetime.now()
 
                 def _should_stop() -> bool:
@@ -334,8 +316,6 @@ class Study(BaseStudy):
                     )
         finally:
             self._optimize_lock.release()
-            self._progress_bar.close()
-            del self._progress_bar
 
     def set_user_attr(self, key, value):
         # type: (str, Any) -> None
@@ -652,8 +632,6 @@ class Study(BaseStudy):
                     break
 
             self._run_trial_and_callbacks(func, catch, callbacks, gc_after_trial)
-
-            self._progress_bar.update((datetime.datetime.now() - time_start).total_seconds())
 
         self._storage.remove_session()
 
