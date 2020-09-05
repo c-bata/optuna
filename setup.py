@@ -28,7 +28,7 @@ def get_long_description() -> str:
 def get_install_requires() -> List[str]:
 
     return [
-        "cmaes==0.6.0",
+        "cmaes>=0.6.1",
         "colorlog",
         "joblib",
         "numpy",
