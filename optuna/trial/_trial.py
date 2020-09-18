@@ -45,6 +45,10 @@ class Trial(BaseTrial):
             A :class:`~optuna.study.Study` object.
         trial_id:
             A trial ID that is automatically generated.
+        relative_search_space:
+            A search space for relative sampling.
+            :meth:`~optuna.samplers.BaseSampler.infer_relative_search_space`
+            will be called if given :obj:`None`.
 
     """
 
@@ -52,6 +56,7 @@ class Trial(BaseTrial):
         self,
         study,  # type: Study
         trial_id,  # type: int
+        relative_search_space=None,  # type: Optional[Dict[str, BaseDistribution]]
     ):
         # type: (...) -> None
 
@@ -62,6 +67,7 @@ class Trial(BaseTrial):
         self._study_id = self.study._study_id
         self.storage = self.study._storage
 
+        self.relative_search_space = relative_search_space
         self._init_relative_params()
 
     def _init_relative_params(self):
@@ -71,7 +77,11 @@ class Trial(BaseTrial):
 
         study = pruners._filter_study(self.study, trial)
 
-        self.relative_search_space = self.study.sampler.infer_relative_search_space(study, trial)
+        if self.relative_search_space is None:
+            # TODO: categoricalとかをrelative search spaceに与えると実装によってはsample_relativeでバグるからOptunaに入れるなら考えないといけない。
+            self.relative_search_space = self.study.sampler.infer_relative_search_space(
+                study, trial
+            )
         self.relative_params = self.study.sampler.sample_relative(
             study, trial, self.relative_search_space
         )
@@ -711,7 +721,7 @@ class Trial(BaseTrial):
         if name not in self.relative_params:
             return False
 
-        if name not in self.relative_search_space:
+        if self.relative_search_space is None or name not in self.relative_search_space:
             raise ValueError(
                 "The parameter '{}' was sampled by `sample_relative` method "
                 "but it is not contained in the relative search space.".format(name)
