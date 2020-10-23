@@ -16,7 +16,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from .._cmaes import CmaEsSampler
 from .alpha import BaseAlpha
 from .alpha import ConstantAlpha
 from .tss import BaseTSS
@@ -44,7 +43,6 @@ class DtsCmaEsSampler(BaseSampler):
         independent_sampler: Optional[BaseSampler] = None,
         seed: Optional[int] = None,
         population_size: Optional[int] = None,
-        min_generation_for_surrogate: int = 2,
         gpr_opts: Dict[str, Any] = None,
         alpha: BaseAlpha = None,
         tss: BaseTSS = None
@@ -69,14 +67,6 @@ class DtsCmaEsSampler(BaseSampler):
 
         self._alpha = alpha or ConstantAlpha(0.6)  # type: BaseAlpha
         self._tss = tss or AllTSS()  # type: BaseTSS
-
-        self._min_generation_for_surrogate = min_generation_for_surrogate
-        self._normal_cmaes_sampler = CmaEsSampler(
-            n_startup_trials=1,
-            independent_sampler=independent_sampler,
-            seed=seed,
-            population_size=population_size
-        )
 
         self._solution_cma_params: Optional[np.ndarray] = None  # 2d
         self._first_model_pred_mean: Optional[np.ndarray] = None  # 1d
@@ -145,52 +135,46 @@ class DtsCmaEsSampler(BaseSampler):
         if self._optimizer.dim != len(ordered_keys):
             raise ValueError("Detect dynamic search space")
 
-        if self._optimizer.generation < self._min_generation_for_surrogate:
-            params = self._normal_cmaes_sampler.sample_relative(
-                study, trial, search_space
-            )
-            self._optimizer = self._normal_cmaes_sampler._optimizer
-
-            if self._optimizer.generation < self._min_generation_for_surrogate:
-                return params
-
-            return self._sample_and_predict(
-                study,
-                trial,
-                search_space,
-                ordered_keys,
-                complete_trials
-            )
-
         current_solutions = [
             t
             for t in complete_trials
             if t.system_attrs.get("dts-cmaes:generation", -1) == self._optimizer.generation
         ]
         n_current_completed_solutions = len([t for t in current_solutions if t.state == TrialState.COMPLETE])
-        n_current_requires = int(np.round(self._optimizer.population_size * self._alpha.value))
+        if self._optimizer.generation == 0:
+            n_current_requires = self._optimizer.population_size
+        else:
+            n_current_requires = int(np.round(self._optimizer.population_size * self._alpha.value))
 
         optuna_params = self._pop_optuna_param(study, trial, ordered_keys, search_space)
         if optuna_params is not None:
             return optuna_params
 
         if n_current_completed_solutions >= n_current_requires:
-            second_model = self._build_surrogate(
-                ordered_keys,
-                search_space,
-                complete_trials,
-            )
+            if self._first_model_pred_mean is None:
+                self._optimizer.tell([
+                    (self._solution_cma_params[i, :], ,)
+                    for i in range(self._optimizer.population_size)
+                ])
+                self._solution_cma_params = None
+                self._eval_solution_trials = []
+            else:
+                second_model = self._build_surrogate(
+                    ordered_keys,
+                    search_space,
+                    complete_trials,
+                )
 
-            second_model_pred_mean = second_model.predict(self._solution_cma_params)
-            self._optimizer.tell([
-                (self._solution_cma_params[i, :], second_model_pred_mean[i],)
-                for i in range(self._optimizer.population_size)
-            ])
+                second_model_pred_mean = second_model.predict(self._solution_cma_params)
+                self._optimizer.tell([
+                    (self._solution_cma_params[i, :], second_model_pred_mean[i],)
+                    for i in range(self._optimizer.population_size)
+                ])
 
-            self._alpha.update(self._first_model_pred_mean, second_model_pred_mean)
-            self._first_model_pred_mean = None
-            self._solution_cma_params = None
-            self._eval_solution_trials = []
+                self._alpha.update(self._first_model_pred_mean, second_model_pred_mean)
+                self._first_model_pred_mean = None
+                self._solution_cma_params = None
+                self._eval_solution_trials = []
         else:
             return {}
 
@@ -210,6 +194,19 @@ class DtsCmaEsSampler(BaseSampler):
         ordered_keys: List[str],
         complete_trials: List[FrozenTrial],
     ):
+        if len(complete_trials) == 0:
+            cma_params = self._optimizer.ask()
+            optuna_params = {
+                k: _to_optuna_param(search_space[k], p) for k, p in
+                zip(ordered_keys, cma_params)
+            }
+            study._storage.set_trial_system_attr(
+                trial._trial_id,
+                "dts-cmaes:generation",
+                self._optimizer.generation
+            )
+            return optuna_params
+
         # Caution: optimizer should update its seed value
         seed = self._cma_rng.randint(1, 2 ** 16) + trial.number
         self._optimizer._rng = np.random.RandomState(seed)
@@ -232,7 +229,6 @@ class DtsCmaEsSampler(BaseSampler):
             self._eval_solution_trials.append(self._solution_cma_params[idx, :])
 
         optuna_params = self._pop_optuna_param(study, trial, ordered_keys, search_space)
-        assert optuna_params is not None
         return optuna_params
 
     def _build_surrogate(
