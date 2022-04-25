@@ -446,7 +446,7 @@ class TrialValueModel(BaseModel):
 
 class TrialIntermediateValueModel(BaseModel):
     class FloatTypeEnum(enum.Enum):
-        REF_VAL = 1  # Use the value of `intermediate_value` field.
+        USE_VAL = 1  # Use the value of `intermediate_value` field.
         INF_POS = 2  # 'inf'
         INF_NEG = 3  # '-inf'
 
@@ -456,7 +456,7 @@ class TrialIntermediateValueModel(BaseModel):
     trial_id = Column(Integer, ForeignKey("trials.trial_id"), nullable=False)
     step = Column(Integer, nullable=False)
     intermediate_value = Column(Float, nullable=True)
-    float_type = Column(Enum(FloatTypeEnum), nullable=False, default=FloatTypeEnum.REF_VAL)
+    float_type = Column(Enum(FloatTypeEnum), nullable=False, default=FloatTypeEnum.USE_VAL)
 
     trial = orm.relationship(
         TrialModel, backref=orm.backref("intermediate_values", cascade="all, delete-orphan")

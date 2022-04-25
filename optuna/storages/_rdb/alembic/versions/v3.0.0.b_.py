@@ -28,17 +28,14 @@ BaseModel = declarative_base()
 
 class IntermediateValueModel(BaseModel):
     class FloatTypeEnum(enum.Enum):
-        REF_VAL = 1  # Use the value of `intermediate_value` field.
+        USE_VAL = 1  # Use the value of `intermediate_value` field.
         INF_POS = 2  # 'inf'
         INF_NEG = 3  # '-inf'
 
     __tablename__ = "trial_intermediate_values"
-    __table_args__ = (sa.UniqueConstraint("trial_id", "step"),)
     trial_intermediate_value_id = sa.Column(sa.Integer, primary_key=True)
-    trial_id = sa.Column(sa.Integer, sa.ForeignKey("trials.trial_id"), nullable=False)
-    step = sa.Column(sa.Integer, nullable=False)
     intermediate_value = sa.Column(sa.Float, nullable=True)
-    float_type = sa.Column(sa.Enum(FloatTypeEnum), nullable=False)
+    float_type = sa.Column(sa.Enum(FloatTypeEnum), nullable=False, default=FloatTypeEnum.USE_VAL)
 
 
 
@@ -47,7 +44,7 @@ def upgrade():
     session = orm.Session(bind=bind)
 
     with op.batch_alter_table('trial_intermediate_values', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('float_type', sa.Enum('REF_VAL', 'INF_POS', 'INF_NEG', name='floattypeenum'), nullable=False, default=IntermediateValueModel.FloatTypeEnum.REF_VAL))
+        batch_op.add_column(sa.Column('float_type', sa.Enum('USE_VAL', 'INF_POS', 'INF_NEG', name='floattypeenum'), nullable=False, default="USE_VAL"))
         batch_op.alter_column('intermediate_value',
                existing_type=sa.FLOAT(),
                nullable=True)
