@@ -865,6 +865,7 @@ class RDBStorage(BaseStorage):
         trial = models.TrialModel.find_or_raise_by_id(trial_id, session)
         self.check_trial_is_updatable(trial_id, trial.state)
 
+        _intermediate_value: Optional[float] = intermediate_value
         float_type = models.TrialIntermediateValueModel.FloatTypeEnum.USE_VAL
         if math.isinf(intermediate_value):
             _intermediate_value = None
@@ -874,8 +875,6 @@ class RDBStorage(BaseStorage):
                 float_type = models.TrialIntermediateValueModel.FloatTypeEnum.INF_NEG
         elif np.isnan(intermediate_value):
             _intermediate_value = None
-        else:
-            _intermediate_value = intermediate_value
 
         trial_intermediate_value = models.TrialIntermediateValueModel.find_by_trial_and_step(
             trial, step, session
