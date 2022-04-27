@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from contextlib import contextmanager
 import copy
@@ -42,7 +43,7 @@ from optuna.study._study_summary import StudySummary
 from optuna.trial import FrozenTrial
 from optuna.trial import TrialState
 
-
+# TODO(c-bata): Remove this method after fixing inf/-inf handling of trial value
 _RDB_MAX_FLOAT = np.finfo(np.float32).max
 _RDB_MIN_FLOAT = np.finfo(np.float32).min
 
@@ -768,14 +769,8 @@ class RDBStorage(BaseStorage):
         return param_value
 
     @staticmethod
-    def _ensure_not_nan(value: float) -> Optional[float]:
-        if np.isnan(value):
-            return None
-        else:
-            return value
-
-    @staticmethod
     def _ensure_numerical_limit(value: float) -> float:
+        # TODO(c-bata): Remove this method after fixing inf/-inf handling of trial value
 
         # Max and min trial values that can be stored are limited by
         # dialect. Most limiting one is MySQL which in current data
@@ -785,6 +780,7 @@ class RDBStorage(BaseStorage):
 
     @staticmethod
     def _lift_numerical_limit(value: Optional[float]) -> float:
+        # TODO(c-bata): Remove this method after fixing inf/-inf handling of trial value
 
         # Floats can't be compared for equality because they are
         # approximate and not stored as exact values.
@@ -841,6 +837,7 @@ class RDBStorage(BaseStorage):
 
         trial = models.TrialModel.find_or_raise_by_id(trial_id, session)
         self.check_trial_is_updatable(trial_id, trial.state)
+        # TODO(c-bata): Represent +inf / -inf values by enum flags on RDB tables.
         value = self._ensure_numerical_limit(value)
 
         trial_value = models.TrialValueModel.find_by_trial_and_objective(trial, objective, session)
@@ -867,20 +864,31 @@ class RDBStorage(BaseStorage):
 
         trial = models.TrialModel.find_or_raise_by_id(trial_id, session)
         self.check_trial_is_updatable(trial_id, trial.state)
-        _intermediate_value = self._ensure_not_nan(intermediate_value)
-        if _intermediate_value is not None:
-            _intermediate_value = self._ensure_numerical_limit(_intermediate_value)
+
+        float_type = models.TrialIntermediateValueModel.FloatTypeEnum.USE_VAL
+        if math.isinf(intermediate_value):
+            _intermediate_value = None
+            if intermediate_value > 0:
+                float_type = models.TrialIntermediateValueModel.FloatTypeEnum.INF_POS
+            else:
+                float_type = models.TrialIntermediateValueModel.FloatTypeEnum.INF_NEG
+        elif np.isnan(intermediate_value):
+            _intermediate_value = None
+        else:
+            _intermediate_value = intermediate_value
 
         trial_intermediate_value = models.TrialIntermediateValueModel.find_by_trial_and_step(
             trial, step, session
         )
         if trial_intermediate_value is None:
             trial_intermediate_value = models.TrialIntermediateValueModel(
-                trial_id=trial_id, step=step, intermediate_value=_intermediate_value
+                trial_id=trial_id, step=step, intermediate_value=_intermediate_value,
+                float_type=float_type,
             )
             session.add(trial_intermediate_value)
         else:
             trial_intermediate_value.intermediate_value = _intermediate_value
+            trial_intermediate_value.float_type = float_type
 
     def set_trial_user_attr(self, trial_id: int, key: str, value: Any) -> None:
 

@@ -10,6 +10,7 @@ import math
 
 from alembic import op
 import sqlalchemy as sa
+import numpy as np
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
@@ -24,6 +25,8 @@ depends_on = None
 
 
 BaseModel = declarative_base()
+RDB_MAX_FLOAT = np.finfo(np.float32).max
+RDB_MIN_FLOAT = np.finfo(np.float32).min
 
 
 class IntermediateValueModel(BaseModel):
@@ -38,7 +41,6 @@ class IntermediateValueModel(BaseModel):
     float_type = sa.Column(sa.Enum(FloatTypeEnum), nullable=False, default=FloatTypeEnum.USE_VAL)
 
 
-
 def upgrade():
     bind = op.get_bind()
     session = orm.Session(bind=bind)
@@ -51,13 +53,19 @@ def upgrade():
 
     try:
         records = session.query(IntermediateValueModel).all()
-        mapping = [
-            {
+        mapping = []
+        for r in records:
+            float_type: IntermediateValueModel.FloatTypeEnum
+            if np.isclose(r.intermediate_value, RDB_MIN_FLOAT):
+                float_type = IntermediateValueModel.FloatTypeEnum.INF_NEG
+            elif np.isclose(r.intermediate_value, RDB_MAX_FLOAT):
+                float_type = IntermediateValueModel.FloatTypeEnum.INF_POS
+            else:
+                continue
+            mapping.append({
                 'trial_intermediate_value_id': r.trial_intermediate_value_id,
-                'float_type': IntermediateValueModel.FloatTypeEnum.INF_POS if r.intermediate_value > 0 else IntermediateValueModel.FloatTypeEnum.INF_NEG
-            }
-            for r in records if math.isinf(r.intermediate_value)
-        ]
+                'float_type': float_type
+            })
         session.bulk_update_mappings(IntermediateValueModel, mapping)
         session.commit()
     except SQLAlchemyError as e:
