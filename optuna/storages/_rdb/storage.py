@@ -840,6 +840,8 @@ class RDBStorage(BaseStorage, BaseHeartbeat):
         study_id: int,
         states: Optional[Container[TrialState]],
         excluded_trial_ids: Set[int],
+        offset: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> List[FrozenTrial]:
 
         with _create_scoped_session(self.scoped_session) as session:
@@ -851,6 +853,12 @@ class RDBStorage(BaseStorage, BaseHeartbeat):
 
             if states is not None:
                 query = query.filter(models.TrialModel.state.in_(states))
+
+            if offset is not None:
+                query = query.offset(offset)
+
+            if limit is not None:
+                query = query.limit(limit)
 
             trial_ids = query.all()
 
