@@ -22,7 +22,7 @@ from optuna.distributions import CategoricalDistribution
 from optuna.distributions import FloatDistribution
 from optuna.distributions import IntDistribution
 from optuna.testing.pruners import DeterministicPruner
-from optuna.testing.samplers import DeterministicRelativeSampler
+from optuna.testing.samplers import DeterministicSampler
 from optuna.testing.storages import STORAGE_MODES
 from optuna.testing.storages import StorageSupplier
 from optuna.trial import Trial
@@ -186,12 +186,8 @@ def test_suggest_uniform(storage_mode: str) -> None:
     x = 1.0
     y = 2.0
 
-    relative_search_space = {
-        "x": FloatDistribution(low=low, high=high),
-        "y": FloatDistribution(low=low, high=high),
-    }
     relative_params = {"x": x, "y": y}
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
@@ -217,12 +213,8 @@ def test_suggest_loguniform(storage_mode: str) -> None:
     x = 1.0
     y = 2.0
 
-    relative_search_space = {
-        "x": FloatDistribution(low=low, high=high, log=True),
-        "y": FloatDistribution(low=low, high=high, log=True),
-    }
     relative_params = {"x": x, "y": y}
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
@@ -243,12 +235,8 @@ def test_suggest_discrete_uniform(storage_mode: str) -> None:
     x = 1.0
     y = 2.0
 
-    relative_search_space = {
-        "x": FloatDistribution(low=low, high=high, step=step),
-        "y": FloatDistribution(low=low, high=high, step=step),
-    }
     relative_params = {"x": x, "y": y}
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
@@ -398,7 +386,7 @@ def test_suggest_int(storage_mode: str) -> None:
         "y": IntDistribution(low=low, high=high),
     }
     relative_params = {"x": x, "y": y}
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
@@ -477,12 +465,8 @@ def test_suggest_int_log(storage_mode: str) -> None:
     x = 1
     y = 2
 
-    relative_search_space = {
-        "x": IntDistribution(low=low, high=high, log=True),
-        "y": IntDistribution(low=low, high=high, log=True),
-    }
     relative_params = {"x": x, "y": y}
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
@@ -551,13 +535,9 @@ def test_should_prune() -> None:
 @pytest.mark.parametrize("storage_mode", STORAGE_MODES)
 def test_relative_parameters(storage_mode: str) -> None:
 
-    relative_search_space = {
-        "x": FloatDistribution(low=5, high=6),
-        "y": FloatDistribution(low=5, high=6),
-    }
     relative_params = {"x": 5.5, "y": 5.5, "z": 5.5}
 
-    sampler = DeterministicRelativeSampler(relative_search_space, relative_params)  # type: ignore
+    sampler = DeterministicSampler(relative_params)  # type: ignore
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage, sampler=sampler)
