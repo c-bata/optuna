@@ -119,29 +119,9 @@ class InMemoryStorage(BaseStorage):
 
             return self._study_name_to_id[study_name]
 
-    def get_study_name_from_id(self, study_id: int) -> str:
-
+    def get_study(self, study_id: int) -> FrozenStudy:
         with self._lock:
-            self._check_study_id(study_id)
-            return self._studies[study_id].name
-
-    def get_study_directions(self, study_id: int) -> List[StudyDirection]:
-
-        with self._lock:
-            self._check_study_id(study_id)
-            return self._studies[study_id].directions
-
-    def get_study_user_attrs(self, study_id: int) -> Dict[str, Any]:
-
-        with self._lock:
-            self._check_study_id(study_id)
-            return self._studies[study_id].user_attrs
-
-    def get_study_system_attrs(self, study_id: int) -> Dict[str, Any]:
-
-        with self._lock:
-            self._check_study_id(study_id)
-            return self._studies[study_id].system_attrs
+            return self._build_frozen_study(study_id)
 
     def get_all_studies(self) -> List[FrozenStudy]:
         with self._lock:

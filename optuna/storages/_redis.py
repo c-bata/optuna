@@ -291,19 +291,19 @@ class RedisStorage(BaseStorage, BaseHeartbeat):
             raise KeyError("No such study: {}.".format(study_id))
         return list(pickle.loads(direction_pkl))
 
-    def get_study_user_attrs(self, study_id: int) -> Dict[str, Any]:
+    def get_study(self, study_id: int) -> FrozenStudy:
 
         self._check_study_id(study_id)
 
-        study_summary = self._get_study_summary(study_id)
-        return study_summary.user_attrs
-
-    def get_study_system_attrs(self, study_id: int) -> Dict[str, Any]:
-
-        self._check_study_id(study_id)
-
-        study_summary = self._get_study_summary(study_id)
-        return study_summary.system_attrs
+        summary = self._get_study_summary(study_id)
+        return FrozenStudy(
+            study_name=summary.study_name,
+            direction=summary.direction,
+            user_attrs=summary.user_attrs,
+            system_attrs=summary.system_attrs,
+            study_id=summary._study_id,
+            directions=summary.directions,
+        )
 
     @staticmethod
     def _key_study_param_distribution(study_id: int) -> str:

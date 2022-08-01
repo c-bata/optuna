@@ -202,6 +202,18 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def get_study(self, study_id: int) -> FrozenStudy:
+        """Return a :class:`~optuna.study.FrozenStudy` object.
+
+        Returns:
+            A l:class:`~optuna.study.FrozenStudy` object.
+
+        Raises:
+            :exc:`KeyError`:
+                If no study with the matching ``study_id`` exists.
+        """
+        raise NotImplementedError
+
     def get_study_name_from_id(self, study_id: int) -> str:
         """Read the study name of a study.
 
@@ -216,9 +228,8 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
             :exc:`KeyError`:
                 If no study with the matching ``study_id`` exists.
         """
-        raise NotImplementedError
+        return self.get_study(study_id).study_name
 
-    @abc.abstractmethod
     def get_study_directions(self, study_id: int) -> List[StudyDirection]:
         """Read whether a study maximizes or minimizes an objective.
 
@@ -233,9 +244,8 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
             :exc:`KeyError`:
                 If no study with the matching ``study_id`` exists.
         """
-        raise NotImplementedError
+        return self.get_study(study_id).directions
 
-    @abc.abstractmethod
     def get_study_user_attrs(self, study_id: int) -> Dict[str, Any]:
         """Read the user-defined attributes of a study.
 
@@ -250,9 +260,8 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
             :exc:`KeyError`:
                 If no study with the matching ``study_id`` exists.
         """
-        raise NotImplementedError
+        return self.get_study(study_id).user_attrs
 
-    @abc.abstractmethod
     def get_study_system_attrs(self, study_id: int) -> Dict[str, Any]:
         """Read the optuna-internal attributes of a study.
 
@@ -267,7 +276,7 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
             :exc:`KeyError`:
                 If no study with the matching ``study_id`` exists.
         """
-        raise NotImplementedError
+        return self.get_study(study_id).system_attrs
 
     @abc.abstractmethod
     def get_all_studies(self) -> List[FrozenStudy]:
@@ -331,6 +340,7 @@ class BaseStorage(object, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_trial_id_from_study_id_trial_number(self, study_id: int, trial_number: int) -> int:
         """Read the trial ID of a trial.
 
