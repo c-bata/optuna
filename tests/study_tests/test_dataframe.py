@@ -3,7 +3,7 @@ from typing import Tuple
 import pandas as pd
 import pytest
 
-from optuna import create_study
+from optuna import create_study, distributions
 from optuna import create_trial
 from optuna import Trial
 from optuna.testing.storages import STORAGE_MODES
@@ -50,23 +50,24 @@ def test_study_trials_dataframe_with_no_trials() -> None:
 )
 @pytest.mark.parametrize("multi_index", [True, False])
 def test_trials_dataframe(storage_mode: str, attrs: Tuple[str, ...], multi_index: bool) -> None:
-    def f(trial: Trial) -> float:
-
-        x = trial.suggest_int("x", 1, 1)
-        y = trial.suggest_categorical("y", (2.5,))
-        assert isinstance(y, float)
-        trial.set_user_attr("train_loss", 3)
-        trial.set_system_attr("foo", "bar")
-        value = x + y  # 3.5
-
-        # Test reported intermediate values, although it in practice is not "intermediate".
-        trial.report(value, step=0)
-
-        return value
-
+    trials = [
+        create_trial(
+            state=TrialState.COMPLETE,
+            params={"x": 1, "y": 2.5},
+            distributions={
+                "x": distributions.IntDistribution(1, 1),
+                "y": distributions.CategoricalDistribution([2.5]),
+            },
+            user_attrs={"train_loss": 3},
+            system_attrs={"foo": "bar"},
+            intermediate_values={0: 3.5},
+            value=3.5,
+        )
+        for _ in range(3)
+    ]
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
-        study.optimize(f, n_trials=3)
+        study.add_trials(trials)
         df = study.trials_dataframe(attrs=attrs, multi_index=multi_index)
         # Change index to access rows via trial number.
         if multi_index:
@@ -126,17 +127,22 @@ def test_trials_dataframe(storage_mode: str, attrs: Tuple[str, ...], multi_index
 
 @pytest.mark.parametrize("storage_mode", STORAGE_MODES)
 def test_trials_dataframe_with_failure(storage_mode: str) -> None:
-    def f(trial: Trial) -> float:
-
-        x = trial.suggest_int("x", 1, 1)
-        y = trial.suggest_categorical("y", (2.5,))
-        trial.set_user_attr("train_loss", 3)
-        raise ValueError()
-        return x + y  # 3.5
+    trials = [
+        create_trial(
+            state=TrialState.FAIL,
+            params={"x": 1, "y": 2.5},
+            distributions={
+                "x": distributions.IntDistribution(1, 1),
+                "y": distributions.CategoricalDistribution([2.5]),
+            },
+            user_attrs={"train_loss": 3},
+        )
+        for _ in range(3)
+    ]
 
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
-        study.optimize(f, n_trials=3, catch=(ValueError,))
+        study.add_trials(trials)
         df = study.trials_dataframe()
         # Change index to access rows via trial number.
         df.set_index("number", inplace=True, drop=False)
@@ -166,15 +172,21 @@ def test_trials_dataframe_with_failure(storage_mode: str) -> None:
 def test_trials_dataframe_with_multi_objective_optimization(
     attrs: Tuple[str, ...], multi_index: bool
 ) -> None:
-    def f(trial: Trial) -> Tuple[float, float]:
-
-        x = trial.suggest_float("x", 1, 1)
-        y = trial.suggest_float("y", 2, 2)
-
-        return x + y, x**2 + y**2  # 3, 5
+    trials = [
+        create_trial(
+            state=TrialState.FAIL,
+            values=[3, 5],
+            params={"x": 1, "y": 2},
+            distributions={
+                "x": distributions.FloatDistribution(1, 1),
+                "y": distributions.FloatDistribution(2, 2),
+            },
+        )
+        for _ in range(3)
+    ]
 
     study = create_study(directions=["minimize", "maximize"])
-    study.optimize(f, n_trials=3)
+    study.add_trials(trials)
     df = study.trials_dataframe(attrs=attrs, multi_index=multi_index)
 
     if multi_index:
