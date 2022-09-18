@@ -347,14 +347,13 @@ class _ParzenEstimator:
         return transformed
 
     def _precompute_sigmas0(self, observations: Dict[str, np.ndarray]) -> Optional[float]:
+        # If it is univariate, there is no need to precompute sigmas0, so this method returns None.
+        if not self._parameters.multivariate:
+            return None
 
         n_observations = next(iter(observations.values())).size
         n_observations = max(n_observations, 1)
         n_params = len(observations)
-
-        # If it is univariate, there is no need to precompute sigmas0, so this method returns None.
-        if not self._parameters.multivariate:
-            return None
 
         # We use Scott's rule for bandwidth selection if the number of parameters > 1.
         # This rule was used in the BOHB paper.
