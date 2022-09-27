@@ -108,7 +108,9 @@ def upgrade():
         mapping = []
         for r in records:
             value: float
-            if np.isclose(r.intermediate_value, RDB_MAX_FLOAT) or np.isposinf(
+            if r.intermediate_value is None or np.isnan(r.intermediate_value):
+                value = float("nan")
+            elif np.isclose(r.intermediate_value, RDB_MAX_FLOAT) or np.isposinf(
                 r.intermediate_value
             ):
                 value = float("inf")
@@ -116,8 +118,6 @@ def upgrade():
                 r.intermediate_value
             ):
                 value = float("-inf")
-            elif np.isnan(r.intermediate_value):
-                value = float("nan")
             else:
                 value = r.intermediate_value
             (
