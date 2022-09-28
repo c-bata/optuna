@@ -90,18 +90,22 @@ def upgrade():
                     server_default="FINITE",
                 ),
             )
-        with op.batch_alter_table("trial_values") as batch_op:
-            batch_op.alter_column(
-                "value_type",
-                existing_type=sa.Enum("FINITE", "INF_POS", "INF_NEG", name="trialvaluetype"),
-                existing_nullable=False,
-                server_default=None,
-            )
-            batch_op.alter_column(
-                "value",
-                existing_type=sa.Float(precision=FLOAT_PRECISION),
-                nullable=True,
-            )
+
+    if "_alembic_tmp_trial_values" in inspector.get_table_names():
+        op.drop_table("_alembic_tmp_trial_values")
+
+    with op.batch_alter_table("trial_values") as batch_op:
+        batch_op.alter_column(
+            "value_type",
+            existing_type=sa.Enum("FINITE", "INF_POS", "INF_NEG", name="trialvaluetype"),
+            existing_nullable=False,
+            server_default=None,
+        )
+        batch_op.alter_column(
+            "value",
+            existing_type=sa.Float(precision=FLOAT_PRECISION),
+            nullable=True,
+        )
 
     session = orm.Session(bind=bind)
     try:
