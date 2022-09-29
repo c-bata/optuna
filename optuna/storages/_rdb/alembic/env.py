@@ -2,7 +2,7 @@ import logging
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, event
 from sqlalchemy import pool
 
 import optuna.storages._rdb.models
@@ -44,7 +44,7 @@ def run_migrations_offline():
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, render_as_batch=True
+        url=url, target_metadata=target_metadata, literal_binds=True, render_as_batch=True, transactional_ddl=True
     )
 
     with context.begin_transaction():
@@ -64,9 +64,20 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
+    @event.listens_for(connectable.engine, "connect")
+    def do_connect(dbapi_connection, correction_record):
+        # disable pysqlite's emitting of the BEGIN statement entirely.
+        # also stops it from emitting COMMIT before any DDL.
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(connectable.engine, "begin")
+    def do_begin(conn):
+        # emit our own BEGIN
+        conn.exec_driver_sql("BEGIN")
+
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata, render_as_batch=True
+            connection=connection, target_metadata=target_metadata, render_as_batch=True, transactional_ddl=True
         )
 
         with context.begin_transaction():
