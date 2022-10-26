@@ -2,6 +2,11 @@ import abc
 from typing import Any, Optional
 from typing import Dict
 from typing import List
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from optuna.storages._journal.storage import JournalStorageReplayResult
 
 
 class BaseJournalLogStorage(abc.ABC):
@@ -45,9 +50,9 @@ class BaseJournalLogStorage(abc.ABC):
 
 class BaseJournalLogSnapshot(abc.ABC):
     @abc.abstractmethod
-    def save_snapshot(self, snapshot: bytes) -> None:
+    def save_snapshot(self, snapshot: "JournalStorageReplayResult") -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def load_snapshot(self) -> Optional[bytes]:
+    def load_snapshot(self) -> Optional["JournalStorageReplayResult"]:
         raise NotImplementedError

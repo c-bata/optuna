@@ -100,9 +100,7 @@ class JournalStorage(BaseStorage):
             if isinstance(self._backend, BaseJournalLogSnapshot):
                 snapshot = self._backend.load_snapshot()
                 if snapshot is not None:
-                    self._replay_result = JournalStorageReplayResult.restore_from_snapshot(
-                        snapshot, self._worker_id_prefix
-                    )
+                    snapshot.update_worker_id(self._worker_id_prefix)
             self._sync_with_backend()
 
     def _write_log(self, op_code: int, extra_fields: Dict[str, Any]) -> None:
@@ -345,12 +343,9 @@ class JournalStorageReplayResult:
         self._next_study_id: int = 0
         self._worker_id_to_owned_trial_id: Dict[str, int] = {}
 
-    @classmethod
-    def restore_from_snapshot(cls, snapshot: bytes, worker_id_prefix: str) -> "JournalStorageReplayResult":
-        r: "JournalStorageReplayResult" = pickle.loads(snapshot)
-        r._worker_id_prefix = worker_id_prefix
-        r._worker_id_to_owned_trial_id = {}
-        return r
+    def update_worker_id(self, worker_id_prefix: str) -> None:
+        self._worker_id_prefix = worker_id_prefix
+        self._worker_id_to_owned_trial_id = {}
 
     def apply_logs(self, logs: List[Dict[str, Any]]) -> None:
         for log in logs:
