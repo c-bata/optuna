@@ -1,6 +1,7 @@
 import copy
 import datetime
 import enum
+import pickle
 import threading
 from typing import Any
 from typing import Container
@@ -20,6 +21,7 @@ from optuna.exceptions import DuplicatedStudyError
 from optuna.storages import BaseStorage
 from optuna.storages._base import DEFAULT_STUDY_NAME_PREFIX
 from optuna.storages._journal.base import BaseJournalLogStorage
+from optuna.storages._journal.base import BaseJournalLogSnapshot
 from optuna.study._frozen import FrozenStudy
 from optuna.study._study_direction import StudyDirection
 from optuna.trial import FrozenTrial
@@ -29,6 +31,8 @@ from optuna.trial import TrialState
 _logger = optuna.logging.get_logger(__name__)
 
 NOT_FOUND_MSG = "Record does not exist."
+# A heuristic interval number to dump snapshots
+SNAPSHOT_INTERVAL = 10
 
 
 class JournalOperation(enum.IntEnum):
@@ -93,6 +97,12 @@ class JournalStorage(BaseStorage):
         self._replay_result = JournalStorageReplayResult(self._worker_id_prefix)
 
         with self._thread_lock:
+            if isinstance(self._backend, BaseJournalLogSnapshot):
+                snapshot = self._backend.load_snapshot()
+                if snapshot is not None:
+                    self._replay_result = JournalStorageReplayResult.restore_from_snapshot(
+                        snapshot, self._worker_id_prefix
+                    )
             self._sync_with_backend()
 
     def _write_log(self, op_code: int, extra_fields: Dict[str, Any]) -> None:
@@ -212,7 +222,12 @@ class JournalStorage(BaseStorage):
         with self._thread_lock:
             self._write_log(JournalOperation.CREATE_TRIAL, log)
             self._sync_with_backend()
-            return self._replay_result._last_created_trial_id_by_this_process
+            trial_id = self._replay_result._last_created_trial_id_by_this_process
+
+        # Dump snapshot here.
+        if isinstance(self._backend, BaseJournalLogSnapshot) and trial_id != 0 and trial_id % SNAPSHOT_INTERVAL == 0:
+            self._backend.save_snapshot(pickle.dumps(self._replay_result))
+        return trial_id
 
     def set_trial_param(
         self,
@@ -329,6 +344,13 @@ class JournalStorageReplayResult:
         self._trial_id_to_study_id: Dict[int, int] = {}
         self._next_study_id: int = 0
         self._worker_id_to_owned_trial_id: Dict[str, int] = {}
+
+    @classmethod
+    def restore_from_snapshot(cls, snapshot: bytes, worker_id_prefix: str) -> "JournalStorageReplayResult":
+        r: "JournalStorageReplayResult" = pickle.loads(snapshot)
+        r._worker_id_prefix = worker_id_prefix
+        r._worker_id_to_owned_trial_id = {}
+        return r
 
     def apply_logs(self, logs: List[Dict[str, Any]]) -> None:
         for log in logs:

@@ -1,5 +1,5 @@
 import abc
-from typing import Any
+from typing import Any, Optional
 from typing import Dict
 from typing import List
 
@@ -40,4 +40,14 @@ class BaseJournalLogStorage(abc.ABC):
                 A list that contains json-serializable logs.
         """
 
+        raise NotImplementedError
+
+
+class BaseJournalLogSnapshot(abc.ABC):
+    @abc.abstractmethod
+    def save_snapshot(self, snapshot: bytes) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def load_snapshot(self) -> Optional[bytes]:
         raise NotImplementedError

@@ -1,12 +1,13 @@
 import json
 import time
-from typing import Any
+from typing import Any, Optional
 from typing import Dict
 from typing import List
 
 from optuna._experimental import experimental_class
 from optuna._imports import try_import
 from optuna.storages._journal.base import BaseJournalLogStorage
+from optuna.storages._journal.base import BaseJournalLogSnapshot
 
 
 with try_import() as _imports:
@@ -14,7 +15,7 @@ with try_import() as _imports:
 
 
 @experimental_class("3.1.0")
-class JournalRedisStorage(BaseJournalLogStorage):
+class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
     """Redis storage class for Journal log backend.
 
     Args:
@@ -82,5 +83,26 @@ class JournalRedisStorage(BaseJournalLogStorage):
                 log_number = self._redis.incr(f"{self._prefix}:log_number", 1)
                 self._redis.set(self._key_log_id(log_number), json.dumps(log))
 
+    def save_snapshot(self, snapshot: bytes) -> None:
+        self._redis.setnx(f"{self._prefix}:snapshot_version", -1)
+        snapshot_version = self._redis.incr(f"{self._prefix}:snapshot_version", 1)
+        self._redis.set(self._key_snapshot(snapshot_version), snapshot)
+
+    def load_snapshot(self) -> Optional[bytes]:
+        snapshot_version_bytes = self._redis.get(f"{self._prefix}:snapshot_version")
+        if snapshot_version_bytes is None:
+            return None
+        snapshot_version = int(snapshot_version_bytes)
+
+        while snapshot_version >= 0:
+            snapshot_bytes = self._redis.get(self._key_snapshot(snapshot_version))
+            if snapshot_bytes is None:
+                snapshot_version -= 1
+                continue
+            return snapshot_bytes
+
     def _key_log_id(self, log_number: int) -> str:
         return f"{self._prefix}:log:{log_number}"
+
+    def _key_snapshot(self, snapshot_version: int) -> str:
+        return f"{self._prefix}:snapshot:{snapshot_version}"
