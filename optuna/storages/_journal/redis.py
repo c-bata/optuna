@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 from typing import Dict
 from typing import List
 
@@ -8,6 +8,7 @@ from optuna._experimental import experimental_class
 from optuna._imports import try_import
 from optuna.storages._journal.base import BaseJournalLogStorage
 from optuna.storages._journal.base import BaseJournalLogSnapshot
+from optuna.storages._journal.base import SnapshotRestoreError
 
 
 with try_import() as _imports:
@@ -88,7 +89,7 @@ class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
         snapshot_version = self._redis.incr(f"{self._prefix}:snapshot_version", 1)
         self._redis.set(self._key_snapshot(snapshot_version), snapshot)
 
-    def load_snapshot(self) -> Optional[bytes]:
+    def load_snapshot(self, loader: Callable[[bytes], None]) -> Optional[bytes]:
         snapshot_version_bytes = self._redis.get(f"{self._prefix}:snapshot_version")
         if snapshot_version_bytes is None:
             return None
@@ -96,10 +97,13 @@ class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
 
         while snapshot_version >= 0:
             snapshot_bytes = self._redis.get(self._key_snapshot(snapshot_version))
-            if snapshot_bytes is None:
-                snapshot_version -= 1
-                continue
-            return snapshot_bytes
+            if snapshot_bytes is not None:
+                try:
+                    loader(snapshot_bytes)
+                except SnapshotRestoreError:
+                    continue
+                return
+            snapshot_version -= 1
 
     def _key_log_id(self, log_number: int) -> str:
         return f"{self._prefix}:log:{log_number}"

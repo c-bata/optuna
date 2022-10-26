@@ -20,7 +20,7 @@ from optuna.distributions import json_to_distribution
 from optuna.exceptions import DuplicatedStudyError
 from optuna.storages import BaseStorage
 from optuna.storages._base import DEFAULT_STUDY_NAME_PREFIX
-from optuna.storages._journal.base import BaseJournalLogStorage
+from optuna.storages._journal.base import BaseJournalLogStorage, SnapshotRestoreError
 from optuna.storages._journal.base import BaseJournalLogSnapshot
 from optuna.study._frozen import FrozenStudy
 from optuna.study._study_direction import StudyDirection
@@ -98,12 +98,17 @@ class JournalStorage(BaseStorage):
 
         with self._thread_lock:
             if isinstance(self._backend, BaseJournalLogSnapshot):
-                snapshot = self._backend.load_snapshot()
-                if snapshot is not None:
-                    self._replay_result = JournalStorageReplayResult.restore_from_snapshot(
-                        snapshot, self._worker_id_prefix
-                    )
+                self._backend.load_snapshot(self.restore_replay_result)
             self._sync_with_backend()
+
+    def restore_replay_result(self, snapshot: bytes) -> None:
+        try:
+            r: "JournalStorageReplayResult" = pickle.loads(snapshot)
+        except Exception as e:
+            raise SnapshotRestoreError("Failed to restore JournalStorageReplayResult") from e
+        r._worker_id_prefix = self._worker_id_prefix
+        r._worker_id_to_owned_trial_id = {}
+        self._replay_result = r
 
     def _write_log(self, op_code: int, extra_fields: Dict[str, Any]) -> None:
         worker_id = self._replay_result.worker_id
@@ -344,13 +349,6 @@ class JournalStorageReplayResult:
         self._trial_id_to_study_id: Dict[int, int] = {}
         self._next_study_id: int = 0
         self._worker_id_to_owned_trial_id: Dict[str, int] = {}
-
-    @classmethod
-    def restore_from_snapshot(cls, snapshot: bytes, worker_id_prefix: str) -> "JournalStorageReplayResult":
-        r: "JournalStorageReplayResult" = pickle.loads(snapshot)
-        r._worker_id_prefix = worker_id_prefix
-        r._worker_id_to_owned_trial_id = {}
-        return r
 
     def apply_logs(self, logs: List[Dict[str, Any]]) -> None:
         for log in logs:
