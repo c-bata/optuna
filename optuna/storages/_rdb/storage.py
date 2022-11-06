@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Tuple
 from typing import Callable
 from typing import Container
 from typing import Dict
@@ -605,6 +605,18 @@ class RDBStorage(BaseStorage, BaseHeartbeat):
             self._set_trial_param_without_commit(
                 session, trial_id, param_name, param_value_internal, distribution
             )
+
+    def set_trial_params(
+        self,
+        trial_id: int,
+        params: Dict[str, Tuple[distributions.BaseDistribution, float]]
+    ) -> None:
+
+        with _create_scoped_session(self.scoped_session, True) as session:
+            for param_name, (distribution, param_value_internal) in params.items():
+                self._set_trial_param_without_commit(
+                    session, trial_id, param_name, param_value_internal, distribution
+                )
 
     def _set_trial_param_without_commit(
         self,

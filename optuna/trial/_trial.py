@@ -1,7 +1,7 @@
 import copy
 import datetime
 from functools import cached_property
-from typing import Any
+from typing import Any, Tuple
 from typing import Dict
 from typing import Optional
 from typing import Sequence
@@ -53,6 +53,7 @@ class Trial(BaseTrial):
         self.storage = self.study._storage
 
         self._init_relative_params()
+        self._buffered_params: Dict[str, Tuple[distributions.BaseDistribution, float]] = {}
 
     def _init_relative_params(self) -> None:
 
@@ -465,6 +466,7 @@ class Trial(BaseTrial):
             )
             return
 
+        self._flush_buffered_params()
         self.storage.set_trial_intermediate_value(self._trial_id, step, value)
         self._cached_frozen_trial.intermediate_values[step] = value
 
@@ -574,6 +576,11 @@ class Trial(BaseTrial):
         self.storage.set_trial_system_attr(self._trial_id, key, value)
         self._cached_frozen_trial.system_attrs[key] = value
 
+    def _flush_buffered_params(self):
+        if isinstance(self.storage, optuna.storages.RDBStorage):
+            self.storage.set_trial_params(trial_id=self._trial_id, params=self._buffered_params)
+            self._buffered_params = {}
+
     def _suggest(self, name: str, distribution: BaseDistribution) -> Any:
 
         storage = self.storage
@@ -599,7 +606,10 @@ class Trial(BaseTrial):
                 )
 
             param_value_in_internal_repr = distribution.to_internal_repr(param_value)
-            storage.set_trial_param(trial_id, name, param_value_in_internal_repr, distribution)
+            if isinstance(self.storage, optuna.storages.RDBStorage):
+                self._buffered_params[name] = (distribution, param_value_in_internal_repr)
+            else:
+                storage.set_trial_param(trial_id, name, param_value_in_internal_repr, distribution)
 
         self._cached_frozen_trial.distributions[name] = distribution
         self._cached_frozen_trial.params[name] = param_value

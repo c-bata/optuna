@@ -207,6 +207,7 @@ def _run_trial(
 
     # `_tell_with_warning` may raise during trial post-processing.
     try:
+        trial._flush_buffered_params()
         frozen_trial = _tell_with_warning(
             study=study,
             trial=trial,
