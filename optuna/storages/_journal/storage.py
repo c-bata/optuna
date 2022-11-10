@@ -134,8 +134,21 @@ class JournalStorage(BaseStorage):
         self._backend.append_logs([{"op_code": op_code, "worker_id": worker_id, **extra_fields}])
 
     def _sync_with_backend(self) -> None:
+        start_log_number = self._replay_result.log_number_read + 1
         logs = self._backend.read_logs(self._replay_result.log_number_read)
         self._replay_result.apply_logs(logs)
+
+        if not isinstance(self._backend, BaseJournalLogSnapshot):
+            return
+
+        # Dump snapshot here.
+        for log_number, log in enumerate(logs, start=start_log_number + 1):
+            if (
+                log_number != 0
+                and log_number % self._backend.snapshot_interval == 0
+                and self._replay_result.is_issued_by_this_worker(log)
+            ):
+                self._backend.save_snapshot(pickle.dumps(self._replay_result))
 
     def create_new_study(self, study_name: Optional[str] = None) -> int:
         study_name = study_name or DEFAULT_STUDY_NAME_PREFIX + str(uuid.uuid4())
@@ -149,16 +162,7 @@ class JournalStorage(BaseStorage):
                     continue
 
                 _logger.info("A new study created in Journal with name: {}".format(study_name))
-                study_id = frozen_study._study_id
-
-                # Dump snapshot here.
-                if (
-                    isinstance(self._backend, BaseJournalLogSnapshot)
-                    and study_id != 0
-                    and study_id % self._backend.snapshot_interval == 0
-                ):
-                    self._backend.save_snapshot(pickle.dumps(self._replay_result))
-                return study_id
+                return frozen_study._study_id
             assert False, "Should not reach."
 
     def delete_study(self, study_id: int) -> None:
@@ -257,16 +261,7 @@ class JournalStorage(BaseStorage):
         with self._thread_lock:
             self._write_log(JournalOperation.CREATE_TRIAL, log)
             self._sync_with_backend()
-            trial_id = self._replay_result._last_created_trial_id_by_this_process
-
-        # Dump snapshot here.
-        if (
-            isinstance(self._backend, BaseJournalLogSnapshot)
-            and trial_id != 0
-            and trial_id % self._backend.snapshot_interval == 0
-        ):
-            self._backend.save_snapshot(pickle.dumps(self._replay_result))
-        return trial_id
+            return self._replay_result._last_created_trial_id_by_this_process
 
     def set_trial_param(
         self,
@@ -384,6 +379,18 @@ class JournalStorageReplayResult:
         self._next_study_id: int = 0
         self._worker_id_to_owned_trial_id: Dict[str, int] = {}
 
+    def should_dump_snapshot(
+        self, start_log_number_read: int, logs: List[Dict[str, Any]], snapshot_interval: int
+    ) -> bool:
+        for log_number, log in enumerate(logs, start=start_log_number_read + 1):
+            if (
+                log_number != 0
+                and log_number % snapshot_interval == 0
+                and self.is_issued_by_this_worker(log)
+            ):
+                return True
+        return False
+
     def apply_logs(self, logs: List[Dict[str, Any]]) -> None:
         for log in logs:
             self.log_number_read += 1
@@ -447,13 +454,13 @@ class JournalStorageReplayResult:
     def owned_trial_id(self) -> Optional[int]:
         return self._worker_id_to_owned_trial_id.get(self.worker_id)
 
-    def _is_issued_by_this_worker(self, log: Dict[str, Any]) -> bool:
+    def is_issued_by_this_worker(self, log: Dict[str, Any]) -> bool:
         return log["worker_id"] == self.worker_id
 
     def _study_exists(self, study_id: int, log: Dict[str, Any]) -> bool:
         if study_id in self._studies:
             return True
-        if self._is_issued_by_this_worker(log):
+        if self.is_issued_by_this_worker(log):
             raise KeyError(NOT_FOUND_MSG)
         return False
 
@@ -461,7 +468,7 @@ class JournalStorageReplayResult:
         study_name = log["study_name"]
 
         if study_name in [s.study_name for s in self._studies.values()]:
-            if self._is_issued_by_this_worker(log):
+            if self.is_issued_by_this_worker(log):
                 raise DuplicatedStudyError(
                     "Another study with name '{}' already exists. "
                     "Please specify a different name, or reuse the existing one "
@@ -513,7 +520,7 @@ class JournalStorageReplayResult:
 
         current_directions = self._studies[study_id]._directions
         if current_directions[0] != StudyDirection.NOT_SET and current_directions != directions:
-            if self._is_issued_by_this_worker(log):
+            if self.is_issued_by_this_worker(log):
                 raise ValueError(
                     "Cannot overwrite study direction from {} to {}.".format(
                         current_directions, directions
@@ -563,7 +570,7 @@ class JournalStorageReplayResult:
         self._study_id_to_trial_ids[study_id].append(trial_id)
         self._trial_id_to_study_id[trial_id] = study_id
 
-        if self._is_issued_by_this_worker(log):
+        if self.is_issued_by_this_worker(log):
             self._last_created_trial_id_by_this_process = trial_id
             if self._trials[trial_id].state == TrialState.RUNNING:
                 self._worker_id_to_owned_trial_id[self.worker_id] = trial_id
@@ -588,7 +595,7 @@ class JournalStorageReplayResult:
                         prev_trial.distributions[param_name], distribution
                     )
                 except Exception:
-                    if self._is_issued_by_this_worker(log):
+                    if self.is_issued_by_this_worker(log):
                         raise
                     return
                 break
@@ -614,7 +621,7 @@ class JournalStorageReplayResult:
         trial = copy.copy(self._trials[trial_id])
         if state == TrialState.RUNNING:
             trial.datetime_start = datetime_from_isoformat(log["datetime_start"])
-            if self._is_issued_by_this_worker(log):
+            if self.is_issued_by_this_worker(log):
                 self._worker_id_to_owned_trial_id[self.worker_id] = trial_id
         if state.is_finished():
             trial.datetime_complete = datetime_from_isoformat(log["datetime_complete"])
@@ -658,11 +665,11 @@ class JournalStorageReplayResult:
 
     def _trial_exists_and_updatable(self, trial_id: int, log: Dict[str, Any]) -> bool:
         if trial_id not in self._trials:
-            if self._is_issued_by_this_worker(log):
+            if self.is_issued_by_this_worker(log):
                 raise KeyError(NOT_FOUND_MSG)
             return False
         elif self._trials[trial_id].state.is_finished():
-            if self._is_issued_by_this_worker(log):
+            if self.is_issued_by_this_worker(log):
                 raise RuntimeError(
                     "Trial#{} has already finished and can not be updated.".format(
                         self._trials[trial_id].number

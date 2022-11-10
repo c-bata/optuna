@@ -33,9 +33,11 @@ class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
         prefix:
             Prefix of the preserved key of logs. This is useful when multiple users work on one
             Redis server.
+        snapshot_interval:
+            snapshot_interval: An interval log number to control how often snapshot is dumped.
     """
 
-    def __init__(self, url: str, use_cluster: bool = False, prefix: str = "") -> None:
+    def __init__(self, url: str, use_cluster: bool = False, prefix: str = "", snapshot_interval: int = 100) -> None:
 
         _imports.check()
 
@@ -43,6 +45,7 @@ class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
         self._redis = redis.Redis.from_url(url)
         self._use_cluster = use_cluster
         self._prefix = prefix
+        self._snapshot_interval = snapshot_interval
 
     def __getstate__(self) -> Dict[Any, Any]:
         state = self.__dict__.copy()
@@ -92,6 +95,10 @@ class JournalRedisStorage(BaseJournalLogStorage, BaseJournalLogSnapshot):
             else:
                 log_number = self._redis.incr(f"{self._prefix}:log_number", 1)
                 self._redis.set(self._key_log_id(log_number), json.dumps(log))
+
+    @property
+    def snapshot_interval(self) -> int:
+        return self._snapshot_interval
 
     def save_snapshot(self, snapshot: bytes) -> None:
         self._redis.set(f"{self._prefix}:snapshot", snapshot)
