@@ -362,9 +362,10 @@ class CmaEsSampler(BaseSampler):
             optimizer = self._init_optimizer(trans, study.direction, population_size=self._popsize)
 
         if self._restart_strategy is None:
-            generation_attr_key = "cma:generation"  # For backward compatibility.
+            # For backward compatibility.
+            generation_attr_key = f"{self._system_attr_key_prefix}:generation"
         else:
-            generation_attr_key = "cma:restart_{}:generation".format(n_restarts)
+            generation_attr_key = f"{self._system_attr_key_prefix}:restart_{n_restarts}:generation"
 
         if optimizer.dim != len(trans.bounds):
             _logger.info(
@@ -398,7 +399,6 @@ class CmaEsSampler(BaseSampler):
 
             if self._restart_strategy == "ipop" and optimizer.should_stop():
                 n_restarts += 1
-                generation_attr_key = "cma:restart_{}:generation".format(n_restarts)
                 popsize = optimizer.population_size * self._inc_popsize
                 optimizer = self._init_optimizer(
                     trans, study.direction, population_size=popsize, randomize_start_point=True
@@ -406,7 +406,7 @@ class CmaEsSampler(BaseSampler):
 
             # Store optimizer.
             optimizer_str = pickle.dumps(optimizer).hex()
-            optimizer_attrs = _split_optimizer_str(optimizer_str)
+            optimizer_attrs = _split_optimizer_str(optimizer_str, self._system_attr_key_prefix)
             for key in optimizer_attrs:
                 study._storage.set_trial_system_attr(trial._trial_id, key, optimizer_attrs[key])
 
@@ -422,7 +422,7 @@ class CmaEsSampler(BaseSampler):
         study._storage.set_trial_system_attr(
             trial._trial_id, generation_attr_key, optimizer.generation
         )
-        study._storage.set_trial_system_attr(trial._trial_id, "cma:n_restarts", n_restarts)
+        study._storage.set_trial_system_attr(trial._trial_id, f"{self._system_attr_key_prefix}:n_restarts", n_restarts)
 
         external_values = trans.untransform(params)
 
@@ -432,12 +432,8 @@ class CmaEsSampler(BaseSampler):
         self,
         completed_trials: "List[optuna.trial.FrozenTrial]",
     ) -> Tuple[Optional[CmaClass], int]:
-        if not self._use_separable_cma:
-            attr_key_optimizer = "cma:optimizer"
-            attr_key_n_restarts = "cma:n_restarts"
-        else:
-            attr_key_optimizer = "sepcma:optimizer"
-            attr_key_n_restarts = "sepcma:n_restarts"
+        attr_key_optimizer = f"{self._system_attr_key_prefix}:optimizer"
+        attr_key_n_restarts = f"{self._system_attr_key_prefix}:n_restarts"
 
         # Restore a previous CMA object.
         for trial in reversed(completed_trials):
@@ -449,11 +445,11 @@ class CmaEsSampler(BaseSampler):
             if len(optimizer_attrs) == 0:
                 continue
 
-            if not self._use_separable_cma and "cma:optimizer" in optimizer_attrs:
+            if not self._use_separable_cma and attr_key_optimizer in optimizer_attrs:
                 # Check "cma:optimizer" key for backward compatibility.
-                optimizer_str = optimizer_attrs["cma:optimizer"]
+                optimizer_str = optimizer_attrs[attr_key_optimizer]
             else:
-                optimizer_str = _concat_optimizer_attrs(optimizer_attrs)
+                optimizer_str = _concat_optimizer_attrs(optimizer_attrs, self._system_attr_key_prefix)
 
             n_restarts: int = trial.system_attrs.get(attr_key_n_restarts, 0)
             return pickle.loads(bytes.fromhex(optimizer_str)), n_restarts
@@ -610,14 +606,22 @@ class CmaEsSampler(BaseSampler):
 
         self._independent_sampler.after_trial(study, trial, state, values)
 
+    @property
+    def _system_attr_key_prefix(self) -> str:
+        if self._use_separable_cma:
+            return "sepcma"
+        if self._with_margin:
+            return "cmawm"
+        return "cma"
 
-def _split_optimizer_str(optimizer_str: str) -> Dict[str, str]:
+
+def _split_optimizer_str(optimizer_str: str, key_prefix: str) -> Dict[str, str]:
     optimizer_len = len(optimizer_str)
     attrs = {}
     for i in range(math.ceil(optimizer_len / _SYSTEM_ATTR_MAX_LENGTH)):
         start = i * _SYSTEM_ATTR_MAX_LENGTH
         end = min((i + 1) * _SYSTEM_ATTR_MAX_LENGTH, optimizer_len)
-        attrs["cma:optimizer:{}".format(i)] = optimizer_str[start:end]
+        attrs[f"{key_prefix}:optimizer:{i}"] = optimizer_str[start:end]
     return attrs
 
 
@@ -628,7 +632,7 @@ def _is_compatible_search_space(
     return intersection_size == len(trans._search_space) == len(search_space)
 
 
-def _concat_optimizer_attrs(optimizer_attrs: Dict[str, str]) -> str:
+def _concat_optimizer_attrs(optimizer_attrs: Dict[str, str], key_prefix: str) -> str:
     return "".join(
-        optimizer_attrs["cma:optimizer:{}".format(i)] for i in range(len(optimizer_attrs))
+        optimizer_attrs[f"{key_prefix}:optimizer:{i}"] for i in range(len(optimizer_attrs))
     )
