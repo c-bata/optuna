@@ -94,7 +94,8 @@ class StorageSupplier:
             file_storage = JournalFileStorage(tempfile.NamedTemporaryFile().name)
             return optuna.storages.JournalStorage(file_storage)
         elif self.storage_specifier == "dask":
-            self.dask_client = distributed.Client()  # type: ignore[no-untyped-call]
+            assert self.dask_client is not None
+            self.dask_client = distributed.Client()
 
             return optuna.integration.DaskStorage(client=self.dask_client, **self.extra_args)
         else:
@@ -108,5 +109,5 @@ class StorageSupplier:
             self.tempfile.close()
 
         if self.dask_client:
-            self.dask_client.shutdown()  # type: ignore[no-untyped-call]
-            self.dask_client.close()  # type: ignore[no-untyped-call]
+            self.dask_client.shutdown()
+            self.dask_client.close()
