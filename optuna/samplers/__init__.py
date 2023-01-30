@@ -3,6 +3,7 @@ from optuna.samplers._base import BaseSampler
 from optuna.samplers._brute_force import BruteForceSampler
 from optuna.samplers._cmaes import CmaEsSampler
 from optuna.samplers._grid import GridSampler
+from optuna.samplers._lfbo import LfboSampler
 from optuna.samplers._partial_fixed import PartialFixedSampler
 from optuna.samplers._qmc import QMCSampler
 from optuna.samplers._random import RandomSampler
@@ -23,6 +24,7 @@ __all__ = [
     "NSGAIISampler",
     "PartialFixedSampler",
     "QMCSampler",
+    "LfboSampler",
     "RandomSampler",
     "TPESampler",
     "intersection_search_space",
