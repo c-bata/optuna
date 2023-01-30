@@ -9,12 +9,13 @@ import warnings
 import numpy as np
 
 import optuna
-from optuna import Study
 from optuna._imports import try_import
 from optuna.distributions import BaseDistribution
 from optuna.distributions import CategoricalDistribution
 from optuna.distributions import FloatDistribution
 from optuna.distributions import IntDistribution
+from optuna.samplers import BaseSampler
+from optuna.study import Study
 from optuna.study import StudyDirection
 from optuna.trial import FrozenTrial
 from optuna.trial import TrialState
@@ -31,7 +32,7 @@ with try_import() as _imports:
     from sklearn.utils import check_random_state
 
 
-class LfboSampler(optuna.samplers.BaseSampler):
+class LfboSampler(BaseSampler):
     """A sampler based on `LFBO (Likelihood-free Bayesian Optimization) <https://arxiv.org/abs/2206.13035>`_.
 
     The implementation were derived from https://github.com/lfbo-ml/lfbo, an official LFBO implementation.
