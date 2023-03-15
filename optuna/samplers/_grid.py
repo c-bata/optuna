@@ -121,11 +121,16 @@ class GridSampler(BaseSampler):
     def infer_relative_search_space(
         self, study: Study, trial: FrozenTrial
     ) -> Dict[str, BaseDistribution]:
+        self._assign_grid_id_to_trial(study, trial)
         return {}
 
     def sample_relative(
         self, study: Study, trial: FrozenTrial, search_space: Dict[str, BaseDistribution]
     ) -> Dict[str, Any]:
+
+        return {}
+
+    def _assign_grid_id_to_trial(self, study: Study, trial: FrozenTrial) -> None:
         # Instead of returning param values, GridSampler puts the target grid id as a system attr,
         # and the values are returned from `sample_independent`. This is because the distribution
         # object is hard to get at the beginning of trial, while we need the access to the object
@@ -134,7 +139,7 @@ class GridSampler(BaseSampler):
         # When the trial is created by RetryFailedTrialCallback or enqueue_trial, we should not
         # assign a new grid_id.
         if "grid_id" in trial.system_attrs or "fixed_params" in trial.system_attrs:
-            return {}
+            return
 
         target_grids = self._get_unvisited_grid_ids(study)
 
@@ -158,8 +163,6 @@ class GridSampler(BaseSampler):
 
         study._storage.set_trial_system_attr(trial._trial_id, "search_space", self._search_space)
         study._storage.set_trial_system_attr(trial._trial_id, "grid_id", grid_id)
-
-        return {}
 
     def sample_independent(
         self,
