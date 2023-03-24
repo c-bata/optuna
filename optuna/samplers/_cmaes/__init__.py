@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 from typing import Optional
+import warnings
 
 from optuna import Study
 from optuna.distributions import BaseDistribution
+from optuna.exceptions import ExperimentalWarning
 from optuna.samplers import BaseSampler
+from optuna.samplers._cmaes.sampler_inmemory import InMemoryCmaEsSampler
 from optuna.samplers._cmaes.sampler_resumable import ResumableCmaEsSampler
 from optuna.trial import FrozenTrial
 
@@ -184,6 +187,15 @@ class CmaEsSampler(BaseSampler):
                 versions without prior notice. See
                 https://github.com/optuna/optuna/releases/tag/v2.6.0.
 
+        keep_optimizer_inmemory:
+            If this is :obj:`True`, the CMA-ES optimizer object is stored in memory, which makes
+            the program run faster and the internal implementation much simpler.
+
+            .. note::
+                Added in v3.2.0 as an experimental feature. The interface may change in newer
+                versions without prior notice. See
+                https://github.com/optuna/optuna/releases/tag/v3.2.0.
+
     """
 
     def __init__(
@@ -202,22 +214,45 @@ class CmaEsSampler(BaseSampler):
         use_separable_cma: bool = False,
         with_margin: bool = False,
         source_trials: Optional[list[FrozenTrial]] = None,
+        keep_optimizer_inmemory: bool = False,
     ) -> None:
-        self._backend_sampler = ResumableCmaEsSampler(
-            x0,
-            sigma0,
-            n_startup_trials,
-            independent_sampler,
-            warn_independent_sampling,
-            seed,
-            consider_pruned_trials=consider_pruned_trials,
-            restart_strategy=restart_strategy,
-            popsize=popsize,
-            inc_popsize=inc_popsize,
-            use_separable_cma=use_separable_cma,
-            with_margin=with_margin,
-            source_trials=source_trials,
-        )
+        if keep_optimizer_inmemory:
+            warnings.warn(
+                "`keep_optimizer_inmemory` option is an experimental feature."
+                " The interface can change in the future.",
+                ExperimentalWarning,
+            )
+            self._backend_sampler = InMemoryCmaEsSampler(
+                x0,
+                sigma0,
+                n_startup_trials,
+                independent_sampler,
+                warn_independent_sampling,
+                seed,
+                consider_pruned_trials=consider_pruned_trials,
+                restart_strategy=restart_strategy,
+                popsize=popsize,
+                inc_popsize=inc_popsize,
+                use_separable_cma=use_separable_cma,
+                with_margin=with_margin,
+                source_trials=source_trials,
+            )
+        else:
+            self._backend_sampler = ResumableCmaEsSampler(
+                x0,
+                sigma0,
+                n_startup_trials,
+                independent_sampler,
+                warn_independent_sampling,
+                seed,
+                consider_pruned_trials=consider_pruned_trials,
+                restart_strategy=restart_strategy,
+                popsize=popsize,
+                inc_popsize=inc_popsize,
+                use_separable_cma=use_separable_cma,
+                with_margin=with_margin,
+                source_trials=source_trials,
+            )
 
     def infer_relative_search_space(
         self, study: Study, trial: FrozenTrial
