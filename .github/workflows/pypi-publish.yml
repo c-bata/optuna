@@ -3,16 +3,16 @@ name: Publish distributions to PyPI or TestPyPI
 # TestPyPI upload is scheduled in each weekday.
 # PyPI upload is only activated if the release is published.
 on:
-  schedule:
-    - cron: '0 15 * * *'
-  release:
+  pull_request:
     types:
-      - published
+      - opened
+    branches:
+      - 'release-v3.1.1'
 
 jobs:
   build-n-publish:
     name: Build and publish Python distributions to PyPI or TestPyPI
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
 
     # Not intended for forks.
     if: github.repository == 'optuna/optuna'
@@ -44,19 +44,10 @@ jobs:
     - name: Verify the distributions
       run: twine check dist/*
 
-    - name: Publish distribution to TestPyPI
-      # The following upload action cannot be executed in the forked repository.
-      if: (github.event_name == 'schedule') || (github.event_name == 'release')
-      uses: pypa/gh-action-pypi-publish@v1.1.0
-      with:
-        user: __token__
-        password: ${{ secrets.test_pypi_password }}
-        repository_url: https://test.pypi.org/legacy/
+    - name: Verify the distributions
+      run: twine check dist/*
 
-    - name: Publish distribution to PyPI
-      # The following upload action cannot be executed in the forked repository.
-      if: github.event_name == 'release'
-      uses: pypa/gh-action-pypi-publish@v1.1.0
+    - uses: actions/upload-artifact@v3
       with:
-        user: __token__
-        password: ${{ secrets.pypi_password }}
+        name: optuna-distribution-packages
+        path: dist/*
