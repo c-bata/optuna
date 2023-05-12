@@ -200,7 +200,15 @@ class _CachedStorage(BaseStorage, BaseHeartbeat):
     def set_trial_state_values(
         self, trial_id: int, state: TrialState, values: Optional[Sequence[float]] = None
     ) -> bool:
-        return self._backend.set_trial_state_values(trial_id, state=state, values=values)
+        ret = self._backend.set_trial_state_values(trial_id, state=state, values=values)
+        if state.is_finished() and trial_id in self._trial_id_to_study_id_and_number:
+            backend_trial = self._backend.get_trial(trial_id)
+            study_id, trial_number = self._trial_id_to_study_id_and_number[trial_id]
+            with self._lock:
+                study = self._studies[study_id]
+                study.trials[trial_number] = backend_trial
+                study.finished_trial_ids.add(trial_id)
+        return ret
 
     def set_trial_intermediate_value(
         self, trial_id: int, step: int, intermediate_value: float

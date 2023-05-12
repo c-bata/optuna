@@ -131,10 +131,6 @@ def test_delete_study() -> None:
     trial_id2 = storage.create_new_trial(study_id2)
     storage.set_trial_state_values(trial_id2, state=TrialState.COMPLETE)
 
-    # Update _StudyInfo.finished_trial_ids
-    storage.read_trials_from_remote_storage(study_id1)
-    storage.read_trials_from_remote_storage(study_id2)
-
     storage.delete_study(study_id1)
     assert storage._get_cached_trial(trial_id1) is None
     assert storage._get_cached_trial(trial_id2) is not None
