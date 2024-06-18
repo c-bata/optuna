@@ -1126,12 +1126,12 @@ class Study:
                 f"Trial {trial.number} finished with value: {trial_value} and parameters: "
                 f"{trial.params}."
             )
-            try:
-                best_trial = self.best_trial
-                message += f" Best is trial {best_trial.number} with value: {best_trial.value}."
-            except ValueError:
-                # If no feasible trials are completed yet, study.best_trial raises ValueError.
-                pass
+            # try:
+            #     best_trial = self.best_trial
+            #     message += f" Best is trial {best_trial.number} with value: {best_trial.value}."
+            # except ValueError:
+            #     # If no feasible trials are completed yet, study.best_trial raises ValueError.
+            #     pass
             _logger.info(message)
         else:
             assert False, "Should not reach."
