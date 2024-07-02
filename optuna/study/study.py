@@ -380,6 +380,7 @@ class Study:
         callbacks: list[Callable[[Study, FrozenTrial], None]] | None = None,
         gc_after_trial: bool = False,
         show_progress_bar: bool = False,
+        logging_callback: Callable[["Study", FrozenTrial, Logger], None] = None,
     ) -> None:
         """Optimize an objective function.
 
@@ -482,6 +483,7 @@ class Study:
             callbacks=callbacks,
             gc_after_trial=gc_after_trial,
             show_progress_bar=show_progress_bar,
+            logging_callback=logging_callback,
         )
 
     def ask(self, fixed_distributions: dict[str, BaseDistribution] | None = None) -> Trial:

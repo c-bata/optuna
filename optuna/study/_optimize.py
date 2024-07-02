@@ -8,10 +8,12 @@ from concurrent.futures import wait
 import datetime
 import gc
 import itertools
+from logging import Logger
 import os
 import sys
 from typing import Any
 from typing import Callable
+from typing import TYPE_CHECKING
 import warnings
 
 import optuna
@@ -27,7 +29,50 @@ from optuna.trial import FrozenTrial
 from optuna.trial import TrialState
 
 
+if TYPE_CHECKING:
+    from optuna.study import Study
+
+    LoggingCallbackFuncType = Callable[["Study", FrozenTrial, Logger, ], None]
+
+
 _logger = logging.get_logger(__name__)
+
+
+def default_logging_callback(study: Study, frozen_trial: FrozenTrial, logger: Logger) -> None:
+    """Default logging callback to record the optimization process.
+
+    This function is expected to be used with the ``logging_callback`` argument of :meth:`Study.optimize`.
+
+    Args:
+        study:
+            An :class:`~optuna.study.Study` object.
+        trial:
+            An :class:`~optuna.trial.Trial` object.
+        logger:
+            A Logger object of standard library logging module.
+    """
+    if frozen_trial.state == TrialState.COMPLETE:
+        study._log_completed_trial(frozen_trial)
+    elif frozen_trial.state == TrialState.PRUNED:
+        _logger.info("Trial {} pruned. {}".format(frozen_trial.number, str(func_err)))
+    elif frozen_trial.state == TrialState.FAIL:
+        if func_err is not None:
+            _log_failed_trial(
+                frozen_trial,
+                repr(func_err),
+                exc_info=func_err_fail_exc_info,
+                value_or_values=value_or_values,
+            )
+        elif STUDY_TELL_WARNING_KEY in frozen_trial.system_attrs:
+            _log_failed_trial(
+                frozen_trial,
+                frozen_trial.system_attrs[STUDY_TELL_WARNING_KEY],
+                value_or_values=value_or_values,
+            )
+        else:
+            assert False, "Should not reach."
+    else:
+        assert False, "Should not reach."
 
 
 def _optimize(
@@ -40,6 +85,7 @@ def _optimize(
     callbacks: list[Callable[["optuna.Study", FrozenTrial], None]] | None = None,
     gc_after_trial: bool = False,
     show_progress_bar: bool = False,
+    logging_callback: Callable[["Study", FrozenTrial, Logger], None] = None,
 ) -> None:
     if not isinstance(catch, tuple):
         raise TypeError(
@@ -52,6 +98,9 @@ def _optimize(
     if show_progress_bar and n_trials is None and timeout is not None and n_jobs != 1:
         warnings.warn("The timeout-based progress bar is not supported with n_jobs != 1.")
         show_progress_bar = False
+
+    if logging_callback is None:
+        logging_callback = default_logging_callback
 
     progress_bar = pbar_module._ProgressBar(show_progress_bar, n_trials, timeout)
 
@@ -70,6 +119,7 @@ def _optimize(
                 reseed_sampler_rng=False,
                 time_start=None,
                 progress_bar=progress_bar,
+                logging_callback=logging_callback,
             )
         else:
             if n_jobs == -1:
@@ -111,6 +161,7 @@ def _optimize(
                             True,
                             time_start,
                             progress_bar,
+                            logging_callback,
                         )
                     )
     finally:
@@ -129,6 +180,7 @@ def _optimize_sequential(
     reseed_sampler_rng: bool,
     time_start: datetime.datetime | None,
     progress_bar: pbar_module._ProgressBar | None,
+    logging_callback: Callable[["Study", FrozenTrial, Logger], None],
 ) -> None:
     # Here we set `in_optimize_loop = True`, not at the beginning of the `_optimize()` function.
     # Because it is a thread-local object and `n_jobs` option spawns new threads.
@@ -156,7 +208,7 @@ def _optimize_sequential(
                 break
 
         try:
-            frozen_trial = _run_trial(study, func, catch)
+            frozen_trial = _run_trial(study, func, catch, logging_callback)
         finally:
             # The following line mitigates memory problems that can be occurred in some
             # environments (e.g., services that use computing containers such as GitHub Actions).
@@ -180,6 +232,7 @@ def _run_trial(
     study: "optuna.Study",
     func: "optuna.study.study.ObjectiveFuncType",
     catch: tuple[type[Exception], ...],
+    logging_callback: Callable[["Study", FrozenTrial, Logger], None],
 ) -> trial_module.FrozenTrial:
     if is_heartbeat_enabled(study._storage):
         optuna.storages.fail_stale_trials(study)
@@ -216,28 +269,7 @@ def _run_trial(
         frozen_trial = study._storage.get_trial(trial._trial_id)
         raise
     finally:
-        if frozen_trial.state == TrialState.COMPLETE:
-            study._log_completed_trial(frozen_trial)
-        elif frozen_trial.state == TrialState.PRUNED:
-            _logger.info("Trial {} pruned. {}".format(frozen_trial.number, str(func_err)))
-        elif frozen_trial.state == TrialState.FAIL:
-            if func_err is not None:
-                _log_failed_trial(
-                    frozen_trial,
-                    repr(func_err),
-                    exc_info=func_err_fail_exc_info,
-                    value_or_values=value_or_values,
-                )
-            elif STUDY_TELL_WARNING_KEY in frozen_trial.system_attrs:
-                _log_failed_trial(
-                    frozen_trial,
-                    frozen_trial.system_attrs[STUDY_TELL_WARNING_KEY],
-                    value_or_values=value_or_values,
-                )
-            else:
-                assert False, "Should not reach."
-        else:
-            assert False, "Should not reach."
+        logging_callback(study, frozen_trial, _logger)
 
     if (
         frozen_trial.state == TrialState.FAIL

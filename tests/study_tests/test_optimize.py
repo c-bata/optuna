@@ -13,6 +13,7 @@ from optuna import TrialPruned
 from optuna.study import _optimize
 from optuna.study._tell import _tell_with_warning
 from optuna.study._tell import STUDY_TELL_WARNING_KEY
+from optuna.study._optimize import default_logging_callback
 from optuna.testing.objectives import fail_objective
 from optuna.testing.storages import STORAGE_MODES
 from optuna.testing.storages import StorageSupplier
@@ -39,13 +40,17 @@ def test_run_trial(storage_mode: str, caplog: LogCaptureFixture) -> None:
         study = create_study(storage=storage)
 
         caplog.clear()
-        frozen_trial = _optimize._run_trial(study, lambda _: 1.0, catch=())
+        frozen_trial = _optimize._run_trial(
+            study, lambda _: 1.0, catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.COMPLETE
         assert frozen_trial.value == 1.0
         assert "Trial 0 finished with value: 1.0 and parameters" in caplog.text
 
         caplog.clear()
-        frozen_trial = _optimize._run_trial(study, lambda _: float("inf"), catch=())
+        frozen_trial = _optimize._run_trial(
+            study, lambda _: float("inf"), catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.COMPLETE
         assert frozen_trial.value == float("inf")
         assert "Trial 1 finished with value: inf and parameters" in caplog.text
@@ -62,19 +67,23 @@ def test_run_trial_automatically_fail(storage_mode: str, caplog: LogCaptureFixtu
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
 
-        frozen_trial = _optimize._run_trial(study, lambda _: float("nan"), catch=())
+        frozen_trial = _optimize._run_trial(
+            study, lambda _: float("nan"), catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.FAIL
         assert frozen_trial.value is None
 
-        frozen_trial = _optimize._run_trial(study, lambda _: None, catch=())  # type: ignore[arg-type,return-value] # noqa: E501
+        frozen_trial = _optimize._run_trial(study, lambda _: None, catch=(), logging_callback=default_logging_callback)  # type: ignore[arg-type,return-value] # noqa: E501
         assert frozen_trial.state == TrialState.FAIL
         assert frozen_trial.value is None
 
-        frozen_trial = _optimize._run_trial(study, lambda _: object(), catch=())  # type: ignore[arg-type,return-value] # noqa: E501
+        frozen_trial = _optimize._run_trial(study, lambda _: object(), catch=(), logging_callback=default_logging_callback)  # type: ignore[arg-type,return-value] # noqa: E501
         assert frozen_trial.state == TrialState.FAIL
         assert frozen_trial.value is None
 
-        frozen_trial = _optimize._run_trial(study, lambda _: [0, 1], catch=())
+        frozen_trial = _optimize._run_trial(
+            study, lambda _: [0, 1], catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.FAIL
         assert frozen_trial.value is None
 
@@ -93,19 +102,28 @@ def test_run_trial_pruned(storage_mode: str, caplog: LogCaptureFixture) -> None:
         study = create_study(storage=storage)
 
         caplog.clear()
-        frozen_trial = _optimize._run_trial(study, gen_func(), catch=())
+        frozen_trial = _optimize._run_trial(
+            study, gen_func(), catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.PRUNED
         assert frozen_trial.value is None
         assert "Trial 0 pruned." in caplog.text
 
         caplog.clear()
-        frozen_trial = _optimize._run_trial(study, gen_func(intermediate=1), catch=())
+        frozen_trial = _optimize._run_trial(
+            study, gen_func(intermediate=1), catch=(), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.PRUNED
         assert frozen_trial.value == 1
         assert "Trial 1 pruned." in caplog.text
 
         caplog.clear()
-        frozen_trial = _optimize._run_trial(study, gen_func(intermediate=float("nan")), catch=())
+        frozen_trial = _optimize._run_trial(
+            study,
+            gen_func(intermediate=float("nan")),
+            catch=(),
+            logging_callback=default_logging_callback,
+        )
         assert frozen_trial.state == TrialState.PRUNED
         assert frozen_trial.value is None
         assert "Trial 2 pruned." in caplog.text
@@ -115,7 +133,9 @@ def test_run_trial_pruned(storage_mode: str, caplog: LogCaptureFixture) -> None:
 def test_run_trial_catch_exception(storage_mode: str) -> None:
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
-        frozen_trial = _optimize._run_trial(study, fail_objective, catch=(ValueError,))
+        frozen_trial = _optimize._run_trial(
+            study, fail_objective, catch=(ValueError,), logging_callback=default_logging_callback
+        )
         assert frozen_trial.state == TrialState.FAIL
         assert STUDY_TELL_WARNING_KEY not in frozen_trial.system_attrs
 
@@ -125,13 +145,15 @@ def test_run_trial_exception(storage_mode: str) -> None:
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
         with pytest.raises(ValueError):
-            _optimize._run_trial(study, fail_objective, ())
+            _optimize._run_trial(study, fail_objective, (), default_logging_callback)
 
     # Test trial with unacceptable exception.
     with StorageSupplier(storage_mode) as storage:
         study = create_study(storage=storage)
         with pytest.raises(ValueError):
-            _optimize._run_trial(study, fail_objective, (ArithmeticError,))
+            _optimize._run_trial(
+                study, fail_objective, (ArithmeticError,), default_logging_callback
+            )
 
 
 @pytest.mark.parametrize("storage_mode", STORAGE_MODES)
@@ -145,7 +167,7 @@ def test_run_trial_invoke_tell_with_suppressing_warning(storage_mode: str) -> No
         with mock.patch(
             "optuna.study._optimize._tell_with_warning", side_effect=_tell_with_warning
         ) as mock_obj:
-            _optimize._run_trial(study, func_numerical, ())
+            _optimize._run_trial(study, func_numerical, (), default_logging_callback)
             mock_obj.assert_called_once_with(
                 study=mock.ANY,
                 trial=mock.ANY,
