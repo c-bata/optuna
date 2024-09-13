@@ -273,69 +273,22 @@ class TrialModel(BaseModel):
         return trial_count.scalar()
 
 
-class TrialUserAttributeModel(BaseModel):
-    __tablename__ = "trial_user_attributes"
-    __table_args__: Any = (UniqueConstraint("trial_id", "key"),)
-    trial_user_attribute_id = _Column(Integer, primary_key=True)
+class TrialAttributeModel(BaseModel):
+    class TrialAttrType(enum.Enum):
+        USER = 1
+        SYSTEM = 2
+
+    __tablename__ = "trial_attributes"
+    __table_args__: Any = (UniqueConstraint("trial_id", "key", "attr_type"),)
+    trial_attribute_id = _Column(Integer, primary_key=True)
     trial_id = _Column(Integer, ForeignKey("trials.trial_id"))
     key = _Column(String(MAX_INDEXED_STRING_LENGTH))
     value_json = _Column(Text())
+    attr_type = _Column(Enum(TrialAttrType), nullable=False)
 
     trial = orm.relationship(
         TrialModel, backref=orm.backref("user_attributes", cascade="all, delete-orphan")
     )
-
-    @classmethod
-    def find_by_trial_and_key(
-        cls, trial: TrialModel, key: str, session: orm.Session
-    ) -> "TrialUserAttributeModel" | None:
-        attribute = (
-            session.query(cls)
-            .filter(cls.trial_id == trial.trial_id)
-            .filter(cls.key == key)
-            .one_or_none()
-        )
-
-        return attribute
-
-    @classmethod
-    def where_trial_id(
-        cls, trial_id: int, session: orm.Session
-    ) -> list["TrialUserAttributeModel"]:
-        return session.query(cls).filter(cls.trial_id == trial_id).all()
-
-
-class TrialSystemAttributeModel(BaseModel):
-    __tablename__ = "trial_system_attributes"
-    __table_args__: Any = (UniqueConstraint("trial_id", "key"),)
-    trial_system_attribute_id = _Column(Integer, primary_key=True)
-    trial_id = _Column(Integer, ForeignKey("trials.trial_id"))
-    key = _Column(String(MAX_INDEXED_STRING_LENGTH))
-    value_json = _Column(Text())
-
-    trial = orm.relationship(
-        TrialModel, backref=orm.backref("system_attributes", cascade="all, delete-orphan")
-    )
-
-    @classmethod
-    def find_by_trial_and_key(
-        cls, trial: TrialModel, key: str, session: orm.Session
-    ) -> "TrialSystemAttributeModel" | None:
-        attribute = (
-            session.query(cls)
-            .filter(cls.trial_id == trial.trial_id)
-            .filter(cls.key == key)
-            .one_or_none()
-        )
-
-        return attribute
-
-    @classmethod
-    def where_trial_id(
-        cls, trial_id: int, session: orm.Session
-    ) -> list["TrialSystemAttributeModel"]:
-        return session.query(cls).filter(cls.trial_id == trial_id).all()
-
 
 class TrialParamModel(BaseModel):
     __tablename__ = "trial_params"

@@ -371,7 +371,7 @@ class RDBStorage(BaseStorage, BaseHeartbeat):
             # Ensure trial exists.
             models.TrialModel.find_or_raise_by_id(trial_id, session)
 
-            attributes = models.TrialUserAttributeModel.where_trial_id(trial_id, session)
+            attributes = models.TrialAttributeModel.where_trial_id(trial_id, session).filter(attr_type=models.TrialAttributeModel.TrialAttrType.USER)
             user_attrs = {attr.key: json.loads(attr.value_json) for attr in attributes}
 
         return user_attrs
