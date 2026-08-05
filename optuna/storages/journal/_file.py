@@ -82,15 +82,20 @@ class JournalFileBackend(BaseJournalBackend):
                     break
                 if last_decode_error is not None:
                     raise last_decode_error
+                is_complete_line = line.endswith(b"\n")
+                if log_number < log_number_from:
+                    if is_complete_line and log_number + 1 not in self._log_number_offset:
+                        self._log_number_offset[log_number + 1] = (
+                            self._log_number_offset[log_number] + byte_len
+                        )
+                    continue
                 if log_number + 1 not in self._log_number_offset:
                     self._log_number_offset[log_number + 1] = (
                         self._log_number_offset[log_number] + byte_len
                     )
-                if log_number < log_number_from:
-                    continue
 
                 # Ensure that each line ends with line separators (\n, \r\n).
-                if not line.endswith(b"\n"):
+                if not is_complete_line:
                     last_decode_error = ValueError("Invalid log format.")
                     del self._log_number_offset[log_number + 1]
                     continue

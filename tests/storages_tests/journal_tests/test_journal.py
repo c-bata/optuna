@@ -5,6 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
 import pathlib
 import pickle
+from tempfile import NamedTemporaryFile
 from types import TracebackType
 from typing import Any
 from typing import IO
@@ -288,3 +289,80 @@ def test_ignore_discard_trial_operation() -> None:
 
         # Optuna simply ignores DISCARD_TRIALS operation.
         assert len(storage.get_all_trials(study._study_id)) == 2
+
+
+def test_read_logs_caches_offset_after_incomplete_skipped_log_1() -> None:
+    """
+    log 0: offset[1] を保存
+    log 1: offset[2] を保存
+    log 2: 不完全
+           offset[3] を保存
+           log_number < 0 は false
+           endswith チェックで不完全行と判定
+           offset[3] を削除
+
+    そのため次回の read_logs(2) は、正しくログ2の先頭を指す offset[2] から読み始めます。
+    """
+    # TODO(c-bata): Use NamedTemporaryFilePool for Windows tests
+    with NamedTemporaryFile() as file:
+        what_to_write_1 = (
+            b'{"op_code":0,"worker_id":"worker-0"}\n' + 
+            b'{"op_code":0,"worker_id":"worker-1"}\n' + 
+            b'{"op_code":0,"work'
+        )
+        what_to_write_2 = (
+            b'er_id":"worker-2"}\n' +
+            b'{"op_code":0,"worker_id":"worker-3"}\n'
+        )
+        file.write(what_to_write_1)
+        file.flush()
+
+        file_backend = journal.JournalFileBackend(file.name)
+        assert list(file_backend.read_logs(0)) == [
+            {"op_code": 0, "worker_id": "worker-0"},
+            {"op_code": 0, "worker_id": "worker-1"},
+        ]
+
+        file.write(what_to_write_2)
+        file.flush()
+
+        assert list(file_backend.read_logs(2)) == [
+            {"op_code": 0, "worker_id": "worker-2"},
+            {"op_code": 0, "worker_id": "worker-3"},
+        ]
+
+
+def test_read_logs_caches_offset_after_incomplete_skipped_log_2() -> None:
+    """
+    log 0: offset[1] を保存
+    log 1: offset[2] を保存
+    log 2: 不完全
+           offset[3] を保存
+           log_number < 3 なので continue
+           endswith チェックは実行されない
+
+    その結果、offset[3] がログ2の途中を指したまま残ります。次回の read_logs(3) はそこから読み始めるため、er_id":"worker-2"}\n をログ3として解釈してデコードエラーになります。
+    """
+    # TODO(c-bata): Use NamedTemporaryFilePool for Windows tests
+    with NamedTemporaryFile() as file:
+        what_to_write_1 = (
+            b'{"op_code":0,"worker_id":"worker-0"}\n' + 
+            b'{"op_code":0,"worker_id":"worker-1"}\n' + 
+            b'{"op_code":0,"work'
+        )
+        what_to_write_2 = (
+            b'er_id":"worker-2"}\n' +
+            b'{"op_code":0,"worker_id":"worker-3"}\n'
+        )
+        file.write(what_to_write_1)
+        file.flush()
+
+        file_backend = journal.JournalFileBackend(file.name)
+        assert list(file_backend.read_logs(3)) == []
+
+        file.write(what_to_write_2)
+        file.flush()
+
+        assert list(file_backend.read_logs(3)) == [
+            {"op_code": 0, "worker_id": "worker-3"},
+        ]
