@@ -14,7 +14,7 @@ def verify_eval_acqf(x: np.ndarray, acqf: acqf_module.BaseAcquisitionFunc) -> No
     x_tensor = torch.from_numpy(x)
     x_tensor.requires_grad_(True)
     acqf_value = acqf.eval_acqf(x_tensor)
-    acqf_value.sum().backward()  # type: ignore
+    acqf_value.sum().backward()
     acqf_grad = x_tensor.grad
     assert acqf_grad is not None
     assert acqf_value.shape == x.shape[:-1]

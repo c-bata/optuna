@@ -176,8 +176,8 @@ class BaseAcquisitionFunc(ABC):
         assert x.ndim == 1
         x_tensor = torch.from_numpy(x).requires_grad_(True)
         val = self.eval_acqf(x_tensor)
-        val.backward()  # type: ignore
-        return val.item(), x_tensor.grad.detach().numpy()  # type: ignore
+        val.backward()
+        return val.item(), x_tensor.grad.detach().numpy()
 
 
 class LogEI(BaseAcquisitionFunc):

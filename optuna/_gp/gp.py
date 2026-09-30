@@ -346,11 +346,11 @@ class GPRegressor:
                     else torch.exp(raw_params_tensor[n_params + 1]) + minimum_noise
                 )
                 loss = -self.marginal_log_likelihood() - log_prior(self)
-                loss.backward()  # type: ignore
+                loss.backward()
                 # scipy.minimize requires all the gradients to be zero for termination.
-                raw_noise_var_grad = raw_params_tensor.grad[n_params + 1]  # type: ignore
+                raw_noise_var_grad = raw_params_tensor.grad[n_params + 1]
                 assert not deterministic_objective or raw_noise_var_grad == 0
-            return loss.item(), raw_params_tensor.grad.detach().cpu().numpy()  # type: ignore
+            return loss.item(), raw_params_tensor.grad.detach().cpu().numpy()
 
         with limit_threads_in_optimization():
             # jac=True means loss_func returns the gradient for gradient descent.
